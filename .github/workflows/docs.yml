@@ -22,7 +22,7 @@ jobs:
             - name: Generate Docs
               run: cargo doc --no-deps
             - name: Add Redirect
-              run: echo '<meta http-equiv="refresh" content="0;url=rusted_graw/index.html">' > target/doc/index.html
+              run: echo '<meta http-equiv="refresh" content="0;url=attpc_envoy/index.html">' > target/doc/index.html
             - name: Remove lock file
               run: rm target/doc/.lock
             - name: Upload artifact
