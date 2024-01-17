@@ -7,15 +7,16 @@ const SURVEYOR_DISK_FILLED_TEXT: &str = "Filled";
 const SURVEYOR_DISK_EMPTY_TEXT: &str = "Empty";
 const SURVEYOR_DISK_NA_TEXT: &str = "N/A";
 
+/// The status of the Surveyor. Can be converted to integer.
 #[derive(Debug, Clone)]
-pub enum SurveyorState {
+pub enum SurveyorStatus {
     Online,
     Offline,
     Invalid,
     Inconsistent,
 }
 
-impl From<i32> for SurveyorState {
+impl From<i32> for SurveyorStatus {
     fn from(value: i32) -> Self {
         match value {
             0 => Self::Offline,
@@ -25,7 +26,7 @@ impl From<i32> for SurveyorState {
     }
 }
 
-impl std::fmt::Display for SurveyorState {
+impl std::fmt::Display for SurveyorStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Online => write!(f, "{SURVEYOR_ONLINE_STATE_TEXT}"),
@@ -36,6 +37,7 @@ impl std::fmt::Display for SurveyorState {
     }
 }
 
+/// The status of the disk being written to by the DataRouter/Surveyor
 #[derive(Debug, Clone)]
 pub enum SurveyorDiskStatus {
     Filled,

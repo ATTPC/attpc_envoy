@@ -1,3 +1,5 @@
+//! This module contains all code relate to the user interface
+//! and interface state management
 pub mod app;
 mod config;
 mod graph_manager;

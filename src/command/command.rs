@@ -1,7 +1,18 @@
+//! # Extending the system
+//! There are some aspects of the GET DAQ system that result in hard edges when running
+//! an experiment. This scripting command system aims to eliminate this flaws by allowing
+//! users to extend the functionality of the DAQ.This is done by writting a shell script in the
+//! `scripts` directory and then tying the scrip to to a function here, which then can be called using
+//! the `execute` function with the appropriate CommandName.
+//!
+//! ## Examples
+//! By default, there are extensions for backing up the ECC configuration files, moving the .graw
+//! files to an experiment specific directory with run subdirectories, and checking if directories exist on the ECC machines.
 use super::constants::{BACKUP_CONFIG_DIR, CONFIG_DIR, SCRIPT_DIR};
 use crate::envoy::surveyor_envoy::SurveyorResponse;
 use std::process::Command;
 
+/// The status of a command which was executed
 #[derive(Debug, Clone)]
 pub enum CommandStatus {
     Success,
@@ -9,7 +20,6 @@ pub enum CommandStatus {
     CouldNotExecute,
 }
 
-/// # CommandName
 /// CommandNames are tied to one of the functions which is callable by the execute function in
 /// this module. All commands must have the same function signature. This allows for relatively straightforward
 /// command sending from the UI. Typically these commands wrap the std::process::Command object which is used to
@@ -32,6 +42,7 @@ impl std::fmt::Display for CommandName {
 }
 
 impl CommandName {
+    /// Retrieve the function associated with this CommandName
     pub fn get_function(
         &self,
     ) -> impl Fn(&[SurveyorResponse], &str, &i32) -> Result<CommandStatus, std::io::Error> {

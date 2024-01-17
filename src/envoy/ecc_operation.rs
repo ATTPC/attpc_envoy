@@ -19,6 +19,8 @@ const ECC_BREAKUP_OP: &str = "Breakup";
 const ECC_STOP_OP: &str = "Stop";
 const ECC_INVALID_OP: &str = "Invalid";
 
+/// The status of an getECCServer
+/// Can be converted to a String or integer
 #[derive(Debug, PartialEq, Clone)]
 pub enum ECCStatus {
     Offline,
@@ -113,6 +115,8 @@ impl From<i32> for ECCStatus {
 }
 
 impl ECCStatus {
+    /// Get the operation associated with progressing the system from this
+    /// status
     pub fn get_forward_operation(&self) -> ECCOperation {
         match self {
             ECCStatus::Idle => ECCOperation::Describe,
@@ -122,6 +126,8 @@ impl ECCStatus {
         }
     }
 
+    /// Get the operation associated with regressing the system frmo this
+    /// status
     pub fn get_backward_operation(&self) -> ECCOperation {
         match self {
             ECCStatus::Ready => ECCOperation::Breakup,
@@ -131,6 +137,7 @@ impl ECCStatus {
         }
     }
 
+    /// Can the system with this status progress
     pub fn can_go_forward(&self) -> bool {
         match self {
             ECCStatus::Idle => true,
@@ -140,6 +147,7 @@ impl ECCStatus {
         }
     }
 
+    /// Can the system with this status regress
     pub fn can_go_backward(&self) -> bool {
         match self {
             ECCStatus::Ready => true,
@@ -150,6 +158,8 @@ impl ECCStatus {
     }
 }
 
+/// An operation to be performed on
+/// a getECCServer. Can be converted to String.
 #[derive(Debug, Clone)]
 pub enum ECCOperation {
     Describe,

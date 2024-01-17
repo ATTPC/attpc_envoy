@@ -10,8 +10,7 @@ use tokio::task::JoinHandle;
 
 const SURVEYOR_URL_PORT: i32 = 8081;
 
-/// # SurveyorResponse
-/// The message delivered from the SurveyorEnvoy
+/// The message delivered from the SurveyorEnvoy (the status of a DataRouter and its machine)
 /// Contains a lot of data from a lot of different pieces of the
 /// filesystem on which the specific data router is running
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -68,9 +67,12 @@ impl SurveyorConfig {
     }
 }
 
-/// # SurveyorEnvoy
 /// The structure encompassing an async task associated with the Surveyor/Data Router system.
-/// At the moment, SurveyorEnvoys can only check the status of the DataRouter as no commands can
+/// The DataRouter is part of the GET DAQ system which takes data from the CoBo/MuTaNT and routes
+/// it to storage/external use. The Surveyor is an extension used by the AT-TPC system which monitors
+/// the status of the DataRouter and the machine on which it is writing data. The Surveyor writes the
+/// status out to an html file which is served and accessed by this envoy.
+/// As such, at the moment, SurveyorEnvoys can only check the status of the DataRouter as no commands can
 /// be sent to them. But maybe in the future this will change.
 #[derive(Debug)]
 pub struct SurveyorEnvoy {
@@ -82,6 +84,7 @@ pub struct SurveyorEnvoy {
 }
 
 impl SurveyorEnvoy {
+    /// Create a new surveyor envoy with some communication channels
     pub fn new(
         config: SurveyorConfig,
         tx: mpsc::Sender<EmbassyMessage>,
@@ -129,13 +132,14 @@ impl SurveyorEnvoy {
         }
     }
 
+    /// Submit a status request to the envoy and parse the response
     async fn submit_check_status(&mut self) -> Result<Option<EmbassyMessage>, EnvoyError> {
         let response = self.connection.get(&self.config.url).send().await?;
         let parsed_response = self.parse_response(response).await?;
         Ok(parsed_response)
     }
 
-    /// Parses the html response.
+    /// Parses the html response from the Surveyor
     async fn parse_response(
         &mut self,
         response: Response,
@@ -191,7 +195,7 @@ impl SurveyorEnvoy {
     }
 }
 
-/// Function to create all of the SurveyorEnvoys and spawn their tatsks. Returns handles to the tasks.
+/// Function to create all of the SurveyorEnvoys and spawn their tasks. Returns handles to the tasks.
 pub fn startup_surveyor_envoys(
     runtime: &mut tokio::runtime::Runtime,
     surveyor_tx: &mpsc::Sender<EmbassyMessage>,

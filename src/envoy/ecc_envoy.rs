@@ -10,8 +10,10 @@ use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+/// The default port for ECC
 const ECC_URL_PORT: i32 = 8083;
 
+/// The SOAP protocol header for ECC
 const ECC_SOAP_HEADER: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
     <SOAP-ENV:Envelope 
     xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" 
@@ -36,7 +38,7 @@ pub struct ECCOperationResponse {
     pub text: String,
 }
 
-/// Response type for ECC status query
+/// Response type for ECC Status query
 /// Native format is XML
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct ECCStatusResponse {
@@ -46,6 +48,7 @@ pub struct ECCStatusResponse {
     pub transition: i32,
 }
 
+/// Struct defining a minimal getECCServer configuration
 #[derive(Debug, Clone)]
 pub struct ECCConfig {
     id: i32,
@@ -55,6 +58,7 @@ pub struct ECCConfig {
 }
 
 impl ECCConfig {
+    /// Create a ECC config from an experiment name and module ID
     pub fn new(id: i32, experiment: &str) -> ECCConfig {
         let address = match id {
             MUTANT_ID => format!("{ADDRESS_START}.1"),
@@ -69,6 +73,7 @@ impl ECCConfig {
         };
     }
 
+    /// Compse the xml string defining the ECC configuration
     fn compose_config_body(&self) -> String {
         let describe = self.describe();
         let prepare = self.experiment.clone();
@@ -90,6 +95,7 @@ impl ECCConfig {
         )
     }
 
+    /// Compose the xml string defining the ECC data link
     fn compose_data_link_body(&self) -> String {
         let source = self.source();
         let ip = self.address.clone();
@@ -106,6 +112,7 @@ impl ECCConfig {
         )
     }
 
+    /// Comopose the string defining the describe ID
     fn describe(&self) -> String {
         match self.id {
             MUTANT_ID => self.experiment.clone(),
@@ -113,6 +120,7 @@ impl ECCConfig {
         }
     }
 
+    /// Compose the string defining the data source (module)
     fn source(&self) -> String {
         match self.id {
             MUTANT_ID => format!("Mutant[master]"),
@@ -120,20 +128,22 @@ impl ECCConfig {
         }
     }
 
+    /// Compose the string defining the associated DataRouter
     fn data_router(&self) -> String {
         format!("data{}", self.id)
     }
 
+    /// Compose the associated getECCServer URL
     fn url(address: &str) -> String {
         format!("http://{}:{}", address, ECC_URL_PORT)
     }
 }
 
-/// # ECCEnvoy
 /// The structure encompassing an async task associated with the ECC Server system.
 /// ECCEnvoys have two modes, status check and transition. Transition envoys tell the server
 /// when to load/unload configuration data. Status check envoys simply check the status
-/// of the server every few seconds.
+/// of the server every few seconds. In principle these tasks could be combined using a timer,
+/// however, I think that separate tasks are prefered to keep the system as reactive as possible
 #[derive(Debug)]
 pub struct ECCEnvoy {
     config: ECCConfig,
@@ -170,7 +180,7 @@ impl ECCEnvoy {
 
     /// This one of the core task loops for an ECCEnvoy. Waits for a
     /// message from the embassy to transition the configuration of
-    /// an ECC Server.
+    /// an ECC Server. Uses tokio::select! to handle cancelling
     pub async fn wait_for_transition(&mut self) -> Result<(), EnvoyError> {
         loop {
             tokio::select! {
@@ -212,6 +222,8 @@ impl ECCEnvoy {
         }
     }
 
+    /// Submit a transition request to the associated getECCServer
+    /// and parse the response
     async fn submit_transition(
         &self,
         message: EmbassyMessage,
@@ -228,6 +240,8 @@ impl ECCEnvoy {
         Ok(parsed_response)
     }
 
+    /// Submit a status check request to the associated getECCServer
+    /// and parse the response
     async fn submit_check_status(&self) -> Result<EmbassyMessage, EnvoyError> {
         let message = format!("{ECC_SOAP_HEADER}<GetState>\n</GetState>\n{ECC_SOAP_FOOTER}");
         let response = self
@@ -241,6 +255,8 @@ impl ECCEnvoy {
         Ok(parsed_response)
     }
 
+    /// Parse an ECC operation (transition) response and compose the
+    /// appropriate EmbassyMessage
     async fn parse_ecc_operation_response(
         &self,
         response: Response,
@@ -287,6 +303,8 @@ impl ECCEnvoy {
         ))
     }
 
+    /// Parse an ECC status response and compose the appropriate
+    /// EmbassyMessage
     async fn parse_ecc_status_response(
         &self,
         response: Response,
@@ -339,6 +357,7 @@ impl ECCEnvoy {
         Ok(status_response)
     }
 
+    /// Compose the xml string for the given transition request
     fn compose_ecc_transition_request(
         &self,
         message: EmbassyMessage,
@@ -353,7 +372,7 @@ impl ECCEnvoy {
 }
 
 /// Startup the ECC communication system
-/// Takes in a runtime, experiment name, and a channel to send data to the embassy. Spawns the ECCEnvoys with tasks to either wait for
+/// Takes in a runtime reference, experiment name, and a channel to send data to the embassy. Spawns the ECCEnvoys with tasks to either wait for
 /// a command to transition that ECC DAQ or to periodically check the status of that particular ECC DAQ.
 pub fn startup_ecc_envoys(
     runtime: &mut tokio::runtime::Runtime,

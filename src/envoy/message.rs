@@ -4,6 +4,7 @@ use super::surveyor_envoy::SurveyorResponse;
 
 const MESSAGE_EMPTY_FIELD: &str = "None";
 
+/// Types of messages the Embassy might recieve
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum MessageKind {
@@ -26,7 +27,6 @@ impl std::fmt::Display for MessageKind {
     }
 }
 
-/// # EmbassyMessage
 /// A unified message type to simplify the transfer of data from the various types of envoys to
 /// the embassy and the embassy to the UI.
 /// Typically the data contained is some form of xml, json, or yaml string. Can be cast to specific message
@@ -50,6 +50,7 @@ impl std::fmt::Display for EmbassyMessage {
 }
 
 impl EmbassyMessage {
+    /// Compose an EmbassyMessage from a SurveyorEnvoy status response
     pub fn compose_surveyor_response(response: String, id: i32) -> Self {
         EmbassyMessage {
             kind: MessageKind::Surveyor,
@@ -59,6 +60,7 @@ impl EmbassyMessage {
         }
     }
 
+    /// Compose an EmbassyMessage from an ECCOperation request
     pub fn compose_ecc_op(operation: String, id: i32) -> Self {
         EmbassyMessage {
             kind: MessageKind::ECCOperation,
@@ -68,6 +70,7 @@ impl EmbassyMessage {
         }
     }
 
+    /// Compose an EmbassyMessage from an ECCOperation response
     pub fn compose_ecc_response(response: String, id: i32) -> Self {
         EmbassyMessage {
             kind: MessageKind::ECCOperation,
@@ -77,6 +80,7 @@ impl EmbassyMessage {
         }
     }
 
+    /// Compose an EmbassyMessage from an ECC status response
     pub fn compose_ecc_status(response: String, id: i32) -> Self {
         EmbassyMessage {
             kind: MessageKind::ECCStatus,
@@ -86,6 +90,7 @@ impl EmbassyMessage {
         }
     }
 
+    /// Compose an EmbassyMessage to cancel all tasks
     pub fn compose_cancel() -> Self {
         EmbassyMessage {
             kind: MessageKind::Cancel,

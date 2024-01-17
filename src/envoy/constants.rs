@@ -1,3 +1,4 @@
+//! Constants used across the envoy system
 pub const NUMBER_OF_MODULES: i32 = 12;
 pub const MUTANT_ID: i32 = 11;
 pub const PROTOCOL: &str = "TCP";

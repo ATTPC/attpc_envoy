@@ -6,7 +6,7 @@ use crate::envoy::constants::{MUTANT_ID, NUMBER_OF_MODULES};
 use crate::envoy::ecc_operation::{ECCOperation, ECCStatus};
 use crate::envoy::embassy::{connect_embassy, Embassy};
 use crate::envoy::message::EmbassyMessage;
-use crate::envoy::surveyor_state::{SurveyorDiskStatus, SurveyorState};
+use crate::envoy::surveyor_status::{SurveyorDiskStatus, SurveyorStatus};
 
 use eframe::egui::widgets::Button;
 use eframe::egui::widgets::DragValue;
@@ -18,9 +18,8 @@ use std::time::{Duration, Instant};
 
 const DEFAULT_TEXT_COLOR: Color32 = Color32::LIGHT_GRAY;
 
-/// # EnvoyApp
-/// EnvoyApp implements the eframe::App trait, and holds most of the controlling functionality of the program,
-/// including the tokio runtime and the embassy hub.
+/// EnvoyApp implements the eframe::App trait,
+/// and holds the tokio runtime and the embassy hub.
 #[derive(Debug)]
 pub struct EnvoyApp {
     config: Config,
@@ -842,7 +841,7 @@ impl eframe::App for EnvoyApp {
                                 );
                             });
                             row.col(|ui| {
-                                let surv_type = SurveyorState::from(status.state);
+                                let surv_type = SurveyorStatus::from(status.state);
                                 ui.label(RichText::new(format!("{}", surv_type)).color(&surv_type));
                             });
                             row.col(|ui| {

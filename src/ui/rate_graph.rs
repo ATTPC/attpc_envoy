@@ -1,7 +1,6 @@
 use egui_plot::Line;
 use std::collections::VecDeque;
 
-/// # RateGraph
 /// Implementation of a graph for our data. Under the hood, it's just a double
 /// ended queue of data. If the queue reaches the maximum allowed size, then the oldest
 /// data point is dropped to add the new one (creates the ticker-tape effect).
@@ -15,9 +14,9 @@ pub struct RateGraph {
 }
 
 impl RateGraph {
-    /// create a named graph with a max size
+    /// Create a named graph with a max size
     ///
-    /// Note: time increment is hard coded, should probably fix that.
+    /// Note: time increment is hard coded to match the surveyor, should probably fix that.
     pub fn new(name: &str, max_points: &usize) -> Self {
         Self {
             points: VecDeque::new(),
@@ -28,6 +27,7 @@ impl RateGraph {
         }
     }
 
+    /// Add a point to the graph, removing the earliest point if the capacity is reached
     pub fn add_point(&mut self, rate: f64) {
         if self.points.len() == self.max_points {
             self.points.pop_front();
@@ -38,12 +38,6 @@ impl RateGraph {
     }
 
     /// Convert the data to a egui_plot::Line.
-    ///
-    /// Note: This might suck. egui_plot::PlotPoints requires a Vec, and that vec *has* to be cloned. A Vec would be bad for
-    /// our underlying data structure cause we need to remove points efficiently... but this conversion might be so costly (happens every frame)
-    /// that it outwieghs the cost of using a vec natively... but the Vec still would have to be cloned sooooooo...
-    ///
-    /// Needs some serious testing.
     pub fn get_points_to_draw(&self) -> Line {
         let total_len = self.points.len() as i32 - 1;
         let graph = Line::new(
@@ -59,11 +53,13 @@ impl RateGraph {
         return graph;
     }
 
+    /// Reset the graph, deleting all points
     pub fn reset(&mut self) {
         self.points.clear();
         self.last_time = 0.0;
     }
 
+    /// Change the maximum number of points the graph can have
     pub fn change_max_points(&mut self, max_points: &usize) {
         self.max_points = *max_points;
         self.reset();

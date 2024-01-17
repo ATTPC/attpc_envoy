@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 const HEADER_STR: &str = "Run,Duration(s),Note,Gas,Beam,Energy(MeV/U),Pressure(Torr),B-Field(T),V_THGEM(V),V_MM(V),V_Cathode(kV),E-Drift(V),E-Trans(V)\n";
 
-/// # Config
 /// (De)Serializable application configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -46,6 +45,7 @@ impl Config {
         };
     }
 
+    /// Get the path to a configuration table which we will log experiment data to
     fn get_config_table(&self) -> PathBuf {
         let table_dir = PathBuf::from("tables/");
         if !table_dir.exists() {
@@ -73,6 +73,7 @@ impl Config {
         return table_path;
     }
 
+    /// Write experiment data to a log table
     pub fn write_table(&self, ellapsed_time: std::time::Duration) {
         let path = self.get_config_table();
         if let Ok(mut file) = std::fs::OpenOptions::new().append(true).open(path) {
