@@ -720,7 +720,8 @@ impl eframe::App for EnvoyApp {
                     })
                     .body(|body| {
                         let ecc_status = self.status.get_ecc_status_response();
-                        body.rows(40.0, ecc_status.len(), |ridx, mut row| {
+                        body.rows(40.0, ecc_status.len(), |mut row| {
+                            let ridx = row.index();
                             let status = &ecc_status[ridx];
                             let ecc_type = ECCStatus::from(status.state);
                             row.col(|ui| {
@@ -830,7 +831,8 @@ impl eframe::App for EnvoyApp {
                     })
                     .body(|body| {
                         let surveyor_status = self.status.get_surveyor_status_response();
-                        body.rows(40.0, surveyor_status.len(), |ridx, mut row| {
+                        body.rows(40.0, surveyor_status.len(), |mut row| {
+                            let ridx = row.index();
                             let status = &surveyor_status[ridx];
                             let disk_stat = SurveyorDiskStatus::from(status.disk_status.as_str());
                             row.col(|ui| {
