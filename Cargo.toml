@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 eframe = "0.26.2"
-egui_extras = "0.26.2"
+egui_extras = "0.27.2"
 egui_plot = "0.26.2"
 human_bytes = "0.4.3"
 native-dialog = { version = "0.7.0", features = ["windows_dpi_awareness"] }
