@@ -93,7 +93,7 @@ fn main() {
     match eframe::run_native(
         "ATTPC Envoy",
         native_options,
-        Box::new(|cc| Box::new(EnvoyApp::new(cc, runtime))),
+        Box::new(|cc| Ok(Box::new(EnvoyApp::new(cc, runtime)))),
     ) {
         Ok(()) => (),
         Err(e) => tracing::error!("Eframe error: {}", e),

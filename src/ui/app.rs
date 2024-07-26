@@ -482,7 +482,7 @@ impl eframe::App for EnvoyApp {
                 ui.add(
                     eframe::egui::widgets::TextEdit::singleline(&mut self.config.experiment)
                         .desired_width(100.0)
-                        .margin([4.0, 4.0].into()),
+                        .margin(eframe::egui::Margin::symmetric(4.0, 4.0)),
                 );
             });
 
@@ -500,7 +500,7 @@ impl eframe::App for EnvoyApp {
                 ui.add(
                     eframe::egui::widgets::TextEdit::singleline(&mut self.config.description)
                         .desired_width(f32::INFINITY)
-                        .margin([4.0, 4.0].into()),
+                        .margin(eframe::egui::Margin::symmetric(4.0, 4.0)),
                 );
             });
             eframe::egui::Grid::new("Config grid")
