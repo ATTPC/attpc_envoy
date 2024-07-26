@@ -12,7 +12,7 @@ egui_plot = "0.26.2"
 human_bytes = "0.4.3"
 native-dialog = { version = "0.7.0", features = ["windows_dpi_awareness"] }
 quick-xml = { version = "0.31.0", features = ["serialize"] }
-reqwest = "0.11.24"
+reqwest = "0.12.4"
 serde = "1.0.197"
 serde_yaml = "0.9.33"
 tokio = { version = "1.38.0", features = ["sync", "rt-multi-thread", "macros"] }
