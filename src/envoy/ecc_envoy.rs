@@ -115,6 +115,7 @@ impl ECCConfig {
                             <DataLink>
                                 <DataSender id="{source}" />
                                 <DataRouter ipAddress="{ip}" name="{exporter}" port="{DATA_EXPORTER_LISTENER_PORT}" type="{PROTOCOL}" />
+                            </DataLink>
                         </DataLinkSet>
                     </table>"#
         )
