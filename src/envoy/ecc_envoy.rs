@@ -1,4 +1,7 @@
-use super::constants::{ADDRESS_START, LISTENER_PORT, MUTANT_ID, NUMBER_OF_MODULES, PROTOCOL};
+use super::constants::{
+    ADDRESS_START, DATA_EXPORTER_LISTENER_PORT, DATA_ROUTER_LISTENER_PORT, MUTANT_ID,
+    NUMBER_OF_MODULES, PROTOCOL,
+};
 use super::ecc_operation::ECCOperation;
 use super::error::EnvoyError;
 use super::message::EmbassyMessage;
@@ -95,18 +98,23 @@ impl ECCConfig {
         )
     }
 
-    /// Compose the xml string defining the ECC data link
+    /// Compose the xml string defining the ECC data link (i.e. connections to DataRouters)
+    /// We define two routers: the file dump (DataRouter) and export (DataExporter)
     fn compose_data_link_body(&self) -> String {
         let source = self.source();
         let ip = self.address.clone();
         let router = self.data_router();
+        let exporter = self.data_exporter();
         format!(
             r#"<table>
                         <DataLinkSet>
                             <DataLink>
                                 <DataSender id="{source}" />
-                                <DataRouter ipAddress="{ip}" name="{router}" port="{LISTENER_PORT}" type="{PROTOCOL}" />
+                                <DataRouter ipAddress="{ip}" name="{router}" port="{DATA_ROUTER_LISTENER_PORT}" type="{PROTOCOL}" />
                             </DataLink>
+                            <DataLink>
+                                <DataSender id="{source}" />
+                                <DataRouter ipAddress="{ip}" name="{exporter}" port="{DATA_EXPORTER_LISTENER_PORT}" type="{PROTOCOL}" />
                         </DataLinkSet>
                     </table>"#
         )
@@ -131,6 +139,11 @@ impl ECCConfig {
     /// Compose the string defining the associated DataRouter
     fn data_router(&self) -> String {
         format!("data{}", self.id)
+    }
+
+    /// Compose the string defining the associated DataExporter
+    fn data_exporter(&self) -> String {
+        format!("exporter{}", self.id)
     }
 
     /// Compose the associated getECCServer URL
