@@ -10,6 +10,8 @@ const MESSAGE_EMPTY_FIELD: &str = "None";
 pub enum MessageKind {
     ECCOperation,
     ECCStatus,
+    FribOperation,
+    FribStatus,
     Surveyor,
     Other,
     Cancel,
@@ -20,6 +22,8 @@ impl std::fmt::Display for MessageKind {
         match self {
             Self::ECCOperation => write!(f, "ECCOperation"),
             Self::ECCStatus => write!(f, "ECCStatus"),
+            Self::FribOperation => write!(f, "FribOperation"),
+            Self::FribStatus => write!(f, "FribStatus"),
             Self::Surveyor => write!(f, "Surveyor"),
             Self::Other => write!(f, "Other"),
             Self::Cancel => write!(f, "Cancel"),
@@ -74,6 +78,26 @@ impl EmbassyMessage {
     pub fn compose_ecc_response(response: String, id: i32) -> Self {
         EmbassyMessage {
             kind: MessageKind::ECCOperation,
+            id,
+            operation: String::from(MESSAGE_EMPTY_FIELD),
+            response,
+        }
+    }
+
+    /// Compose an EmbassyMessage from an FribOperation
+    pub fn compose_frib_op(operation: String, id: i32) -> Self {
+        EmbassyMessage {
+            kind: MessageKind::FribOperation,
+            id,
+            operation,
+            response: String::from(MESSAGE_EMPTY_FIELD),
+        }
+    }
+
+    /// Compose an EmbassyMessage from an FribOperation response
+    pub fn compose_frib_response(response: String, id: i32) -> Self {
+        EmbassyMessage {
+            kind: MessageKind::FribOperation,
             id,
             operation: String::from(MESSAGE_EMPTY_FIELD),
             response,

@@ -32,17 +32,50 @@ impl std::fmt::Display for ECCStatusError {
 impl std::error::Error for ECCStatusError {}
 
 #[derive(Debug)]
+pub enum FribOperationError {
+    BadString(String),
+}
+
+impl std::fmt::Display for FribOperationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BadString(s) => write!(f, "Could not convert string {s} to FribOperation!"),
+        }
+    }
+}
+
+impl std::error::Error for FribOperationError {}
+
+#[derive(Debug)]
+pub enum FribStatusError {
+    BadString(String),
+}
+
+impl std::fmt::Display for FribStatusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BadString(s) => write!(f, "Could not convert string {s} to FribStatus!"),
+        }
+    }
+}
+
+impl std::error::Error for FribStatusError {}
+
+#[derive(Debug)]
 pub enum EnvoyError {
     RequestError(reqwest::Error),
     SendError(SendError<EmbassyMessage>),
-    StatusError(ECCStatusError),
-    OperationError(ECCOperationError),
+    ECCStatusError(ECCStatusError),
+    FribStatusError(FribStatusError),
+    ECCOperationError(ECCOperationError),
+    FribOperationError(FribOperationError),
     MessageParseError(serde_yaml::Error),
     StringToIntError(std::num::ParseIntError),
     StringToFloatError(std::num::ParseFloatError),
     XMLError(quick_xml::Error),
     XMLUtf8Error(std::string::FromUtf8Error),
     XMLConversionError,
+    TCPConnectionError,
 }
 
 impl From<reqwest::Error> for EnvoyError {
@@ -59,13 +92,25 @@ impl From<SendError<EmbassyMessage>> for EnvoyError {
 
 impl From<ECCStatusError> for EnvoyError {
     fn from(value: ECCStatusError) -> Self {
-        Self::StatusError(value)
+        Self::ECCStatusError(value)
     }
 }
 
 impl From<ECCOperationError> for EnvoyError {
     fn from(value: ECCOperationError) -> Self {
-        Self::OperationError(value)
+        Self::ECCOperationError(value)
+    }
+}
+
+impl From<FribOperationError> for EnvoyError {
+    fn from(value: FribOperationError) -> Self {
+        Self::FribOperationError(value)
+    }
+}
+
+impl From<FribStatusError> for EnvoyError {
+    fn from(value: FribStatusError) -> Self {
+        Self::FribStatusError(value)
     }
 }
 
@@ -99,6 +144,12 @@ impl From<std::string::FromUtf8Error> for EnvoyError {
     }
 }
 
+impl From<tokio::io::Error> for EnvoyError {
+    fn from(_: tokio::io::Error) -> Self {
+        Self::TCPConnectionError
+    }
+}
+
 impl std::fmt::Display for EnvoyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -106,14 +157,22 @@ impl std::fmt::Display for EnvoyError {
                 write!(f, "Envoy recieved an error while making a request: {e}")
             }
             Self::MessageParseError(e) => write!(f, "Envoy failed to parse a message to yaml: {e}"),
-            Self::OperationError(e) => write!(f, "Envoy recieved operation error: {e}"),
-            Self::StatusError(e) => write!(f, "Envoy recieved status error: {e}"),
+            Self::ECCOperationError(e) => write!(f, "Envoy recieved ECC operation error: {e}"),
+            Self::FribOperationError(e) => write!(f, "Envoy recieved FRIB operation error: {e}"),
+            Self::ECCStatusError(e) => write!(f, "Envoy recieved ECC status error: {e}"),
+            Self::FribStatusError(e) => write!(f, "Envoy recieved FRIB status error: {e}"),
             Self::SendError(e) => write!(f, "Envoy failed to send a message: {e}"),
             Self::StringToIntError(e) => write!(f, "Envoy failed to parse string to integer: {e}"),
             Self::StringToFloatError(e) => write!(f, "Envoy failed to parse string to float: {e}"),
             Self::XMLError(e) => write!(f, "Envoy failed to parse XML body: {e}"),
             Self::XMLUtf8Error(e) => write!(f, "Envoy failed to convert XML to String: {e}"),
             Self::XMLConversionError => write!(f, "Envoy failed to convert XML data!"),
+            Self::TCPConnectionError => {
+                write!(
+                    f,
+                    "Envoy ran into an error connecting a TCPStream, most likely a timeout"
+                )
+            }
         }
     }
 }

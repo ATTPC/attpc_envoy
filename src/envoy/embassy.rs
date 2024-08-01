@@ -1,5 +1,6 @@
 use super::ecc_envoy::startup_ecc_envoys;
 use super::error::EmbassyError;
+use super::frib_envoy::startup_frib_envoy;
 use super::message::{EmbassyMessage, MessageKind};
 use super::surveyor_envoy::startup_surveyor_envoys;
 use std::collections::HashMap;
@@ -13,6 +14,7 @@ use tokio::sync::mpsc;
 #[derive(Debug)]
 pub struct Embassy {
     ecc_senders: HashMap<i32, mpsc::Sender<EmbassyMessage>>,
+    frib_sender: Option<mpsc::Sender<EmbassyMessage>>,
     envoy_reciever: mpsc::Receiver<EmbassyMessage>,
     cancel: broadcast::Sender<EmbassyMessage>,
 }
@@ -22,10 +24,12 @@ impl Embassy {
     pub fn new(
         envoy_reciever: mpsc::Receiver<EmbassyMessage>,
         ecc_senders: HashMap<i32, mpsc::Sender<EmbassyMessage>>,
+        frib_sender: Option<mpsc::Sender<EmbassyMessage>>,
         cancel: broadcast::Sender<EmbassyMessage>,
     ) -> Self {
         Embassy {
             ecc_senders,
+            frib_sender,
             envoy_reciever,
             cancel,
         }
@@ -43,6 +47,10 @@ impl Embassy {
     pub fn submit_message(&mut self, message: EmbassyMessage) -> Result<(), EmbassyError> {
         if message.kind == MessageKind::ECCOperation {
             if let Some(sender) = self.ecc_senders.get_mut(&message.id) {
+                sender.blocking_send(message)?;
+            }
+        } else if message.kind == MessageKind::FribOperation {
+            if let Some(sender) = &mut self.frib_sender {
                 sender.blocking_send(message)?;
             }
         }
@@ -69,6 +77,7 @@ impl Embassy {
 pub fn connect_embassy(
     runtime: &mut tokio::runtime::Runtime,
     experiment: &str,
+    frib_ports: Option<(i32, i32)>,
 ) -> (Embassy, Vec<tokio::task::JoinHandle<()>>) {
     let (envoy_tx, embassy_rx) = mpsc::channel::<EmbassyMessage>(33);
     let (cancel_tx, _) = broadcast::channel::<EmbassyMessage>(10);
@@ -76,9 +85,17 @@ pub fn connect_embassy(
     let (mut handles, ecc_switchboard) =
         startup_ecc_envoys(runtime, experiment, &envoy_tx, &cancel_tx);
     let mut sur_handles = startup_surveyor_envoys(runtime, &envoy_tx, &cancel_tx);
-
-    let embassy = Embassy::new(embassy_rx, ecc_switchboard, cancel_tx);
-
     handles.append(&mut sur_handles);
+
+    let mut frib_tx = None;
+    if let Some((control_port, response_port)) = frib_ports {
+        let (frib_handle, tx) =
+            startup_frib_envoy(runtime, &envoy_tx, &cancel_tx, control_port, response_port);
+        handles.push(frib_handle);
+        frib_tx = Some(tx);
+    }
+
+    let embassy = Embassy::new(embassy_rx, ecc_switchboard, frib_tx, cancel_tx);
+
     return (embassy, handles);
 }

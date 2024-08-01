@@ -99,7 +99,7 @@ impl EnvoyApp {
     /// Create all of the envoys, the embassy, and start the async tasks
     fn connect(&mut self) {
         if self.embassy.is_none() && self.envoy_handles.is_none() {
-            let (em, handles) = connect_embassy(&mut self.runtime, &self.config.experiment);
+            let (em, handles) = connect_embassy(&mut self.runtime, &self.config.experiment, None);
             tracing::info!("Connnected with {} tasks spawned", handles.len());
             self.embassy = Some(em);
             self.envoy_handles = Some(handles);
