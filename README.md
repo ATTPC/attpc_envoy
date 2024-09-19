@@ -34,4 +34,4 @@ Once the project is stable, a more comprehensive description of the user interfa
 
 ### Logging
 
-If issues begin to occur, the User Interface will attempt to display appropriate status messages that indicate where something went wrong. However, due to the async nature of the tasks, it can be difficult to express this in a clear way. To help with this, the [tracing](https://tokio.rs/tokio/topics/tracing) library is used; tracing allows logging of async type systems in a way that aims to be expressive about where information is coming from. Tracing logs data to the terminal, so if things seem to not be working, check the terminal from which you spawned attpc_envoy and see if anything was reported.
+A directory called `logs` is created from wherever you run attpc_envoy, and daily rotating file logs are generated and written to this directory. If an error occurs, it will be written to file as well as printed on the terminal that launched the envoy. Note that you should periodically check and clean the log directory as it does not do so by itself.

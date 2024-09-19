@@ -58,7 +58,9 @@ mod command;
 mod envoy;
 mod ui;
 
+use std::path::PathBuf;
 use tokio::runtime::Builder;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
 use ui::app::EnvoyApp;
 
 /// Program entry point
@@ -71,6 +73,19 @@ fn main() {
         .build()
         .expect("Could not startup async runtime!");
 
+    let log_path = PathBuf::from("logs/");
+    if !log_path.exists() {
+        match std::fs::create_dir(&log_path) {
+            Ok(_) => (),
+            Err(e) => {
+                println!("Could not make directory for logs! Error: {e}");
+                return;
+            }
+        }
+    }
+    let rolling_log = tracing_appender::rolling::daily(log_path, "attpc_envoy_log");
+    let stderr = std::io::stderr.with_max_level(tracing::Level::ERROR);
+
     //Create our logging/tracing system.
     let subscriber = tracing_subscriber::fmt()
         .compact()
@@ -78,6 +93,7 @@ fn main() {
         .with_line_number(true)
         .with_thread_ids(true)
         .with_target(false)
+        .with_writer(stderr.and(rolling_log))
         .finish();
     tracing::subscriber::set_global_default(subscriber)
         .expect("Could not initialize the tracing system!");
