@@ -33,6 +33,9 @@ pub struct EnvoyApp {
     run_duration: Duration,
 }
 
+//*************//
+// STATE LOGIC //
+//*************//
 impl EnvoyApp {
     /// Create an app from a tokio runtime and eframe context
     pub fn new(cc: &eframe::CreationContext<'_>, runtime: tokio::runtime::Runtime) -> Self {
@@ -420,13 +423,34 @@ impl EnvoyApp {
         tracing::info!("Config autosaved to {}", self.config.config_path.display());
     }
 }
+//*************//
+// STATE LOGIC //
+//*************//
 
+//*************//
+//  APP IMPL  //
+//*************//
 impl eframe::App for EnvoyApp {
     fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
         //Probably don't want to poll every frame, but as a test...
         self.poll_embassy();
+        self.render_config_panel(ctx);
+        self.render_graph_panel(ctx);
+        self.render_ecc_panel(ctx);
+        self.render_data_router_panel(ctx);
+        ctx.request_repaint_after(std::time::Duration::from_secs(1));
+    }
+}
+//*************//
+//  APP IMPL  //
+//*************//
 
-        // The top panel, contains the specific configuration
+//*************//
+// PANELS IMPL //
+//*************//
+impl EnvoyApp {
+    ///Render the configuration panel (top panel in the UI)
+    fn render_config_panel(&mut self, ctx: &eframe::egui::Context) {
         eframe::egui::TopBottomPanel::top("Config_Panel").show(ctx, |ui| {
             //Drop down menu
             ui.menu_button(RichText::new("File").size(16.0), |ui| {
@@ -622,8 +646,10 @@ impl eframe::App for EnvoyApp {
             });
             ui.separator();
         });
+    }
 
-        // Bottom panel, contains the rate graph
+    ///Render the graph panel, the bottom of the UI
+    fn render_graph_panel(&mut self, ctx: &eframe::egui::Context) {
         eframe::egui::TopBottomPanel::bottom("Graph_Panel").show(ctx, |ui| {
             ui.separator();
             let lines = self.graphs.get_line_graphs();
@@ -654,8 +680,10 @@ impl eframe::App for EnvoyApp {
                 });
             ui.separator();
         });
+    }
 
-        //Side panel showing all ECC Envoy controls
+    /// Render the ECC envoy control panel, the left side panel in the ui
+    fn render_ecc_panel(&mut self, ctx: &eframe::egui::Context) {
         eframe::egui::SidePanel::left("ECC_Panel").show(ctx, |ui| {
             ui.label(
                 RichText::new("ECC Envoy Status/Control")
@@ -770,8 +798,10 @@ impl eframe::App for EnvoyApp {
             self.transition_ecc(forward_transitions, true);
             self.transition_ecc(backward_transitions, false);
         });
+    }
 
-        //Central panel showing Data router info. Use central to allow for dynamic resizing of the window.
+    /// Render the panel displaying data router status, this is the central panel in the UI
+    fn render_data_router_panel(&mut self, ctx: &eframe::egui::Context) {
         eframe::egui::CentralPanel::default().show(ctx, |ui| {
             let surv_system_stat = self.status.get_surveyor_system_status();
             ui.label(
@@ -877,7 +907,5 @@ impl eframe::App for EnvoyApp {
 
             ui.separator();
         });
-
-        ctx.request_repaint_after(std::time::Duration::from_secs(1));
     }
 }
