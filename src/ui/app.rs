@@ -1,7 +1,7 @@
 use super::config::Config;
 use super::graph_manager::GraphManager;
 use super::status_manager::StatusManager;
-use crate::command::command::{execute, CommandName, CommandStatus};
+use crate::command::bash_command::{execute, CommandName, CommandStatus};
 use crate::envoy::constants::{MUTANT_ID, NUMBER_OF_MODULES};
 use crate::envoy::ecc_operation::{ECCOperation, ECCStatus};
 use crate::envoy::embassy::{connect_embassy, Embassy};
@@ -89,11 +89,10 @@ impl EnvoyApp {
                     return;
                 }
             };
-            match file.write(yaml_str.as_bytes()) {
+            match file.write_all(yaml_str.as_bytes()) {
                 Ok(_) => (),
                 Err(e) => {
                     tracing::error!("Could not write yaml file: {}", e);
-                    return;
                 }
             }
         }
@@ -161,7 +160,7 @@ impl EnvoyApp {
     /// depending on the is_forward flag. What type of transition is determined by the current state of the envoy as last recorded
     /// by the status envoy.
     fn transition_ecc(&mut self, ids: Vec<usize>, is_forward: bool) {
-        if ids.len() == 0 {
+        if ids.is_empty() {
             return;
         }
 
@@ -171,12 +170,11 @@ impl EnvoyApp {
         }
         for id in ids {
             let status = &self.status.get_ecc_status(id);
-            let operation: ECCOperation;
-            if is_forward {
-                operation = status.get_forward_operation();
+            let operation: ECCOperation = if is_forward {
+                status.get_forward_operation()
             } else {
-                operation = status.get_backward_operation();
-            }
+                status.get_backward_operation()
+            };
             match operation {
                 ECCOperation::Invalid => (),
                 _ => {
@@ -235,7 +233,7 @@ impl EnvoyApp {
 
     /// Transition all of the envoys backward (Regress)
     fn backward_transition_all(&mut self) {
-        let ids: Vec<usize> = (0..(NUMBER_OF_MODULES as usize)).collect();
+        let ids: Vec<usize> = (0..(NUMBER_OF_MODULES)).collect();
         self.transition_ecc(ids, false)
     }
 
@@ -267,14 +265,14 @@ impl EnvoyApp {
         tracing::info!("Run number validated.");
 
         tracing::info!("Re-configuring MuTaNT to reset timestamps...");
-        self.transition_ecc(vec![MUTANT_ID as usize], false);
+        self.transition_ecc(vec![MUTANT_ID], false);
         loop {
             self.poll_embassy();
             if self.status.is_mutant_prepared() {
                 break;
             }
         }
-        self.transition_ecc(vec![MUTANT_ID as usize], true);
+        self.transition_ecc(vec![MUTANT_ID], true);
         loop {
             self.poll_embassy();
             if self.status.is_mutant_ready() {
@@ -884,9 +882,8 @@ impl EnvoyApp {
                                 ui.label(RichText::new(format!("{}", status.files)));
                             });
                             row.col(|ui| {
-                                ui.label(RichText::new(format!(
-                                    "{}",
-                                    human_bytes::human_bytes(status.bytes_used as f64)
+                                ui.label(RichText::new(human_bytes::human_bytes(
+                                    status.bytes_used as f64,
                                 )));
                             });
                             row.col(|ui| {
@@ -896,9 +893,8 @@ impl EnvoyApp {
                                 ui.label(RichText::new(status.percent_used.clone()));
                             });
                             row.col(|ui| {
-                                ui.label(RichText::new(format!(
-                                    "{}",
-                                    human_bytes::human_bytes(status.disk_space as f64)
+                                ui.label(RichText::new(human_bytes::human_bytes(
+                                    status.disk_space as f64,
                                 )));
                             });
                         })

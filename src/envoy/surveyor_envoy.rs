@@ -99,13 +99,13 @@ impl SurveyorEnvoy {
             .connect_timeout(connection_out)
             .timeout(req_timeout)
             .build()?;
-        return Ok(Self {
+        Ok(Self {
             config,
             connection: client,
             outgoing: tx,
             cancel,
             last_bytes: 0,
-        });
+        })
     }
 
     /// This is the core task loop for a SurveyorEnvoy. Every two seconds check the
@@ -119,9 +119,8 @@ impl SurveyorEnvoy {
 
                 _ = tokio::time::sleep(Duration::from_secs(2)) => {
                     if let Ok(response) = self.submit_check_status().await {
-                        match response {
-                            Some(resp) => self.outgoing.send(resp).await?,
-                            None => ()
+                        if let Some(resp) = response {
+                            self.outgoing.send(resp).await?;
                         }
                     } else {
                         let message = EmbassyMessage::compose_surveyor_response(serde_yaml::to_string(&SurveyorResponse::default())?, self.config.id);
@@ -148,7 +147,7 @@ impl SurveyorEnvoy {
         let mut status = SurveyorResponse::default();
         let lines: Vec<&str> = response_text.lines().collect();
 
-        if lines.len() == 0 {
+        if lines.is_empty() {
             return Ok(None);
         }
 
@@ -221,5 +220,5 @@ pub fn startup_surveyor_envoys(
         handles.push(handle);
     }
 
-    return handles;
+    handles
 }

@@ -40,7 +40,7 @@ impl RateGraph {
     /// Convert the data to a egui_plot::Line.
     pub fn get_points_to_draw(&self) -> Line {
         let total_len = self.points.len() as i32 - 1;
-        let graph = Line::new(
+        Line::new(
             self.points
                 .clone()
                 .into_iter()
@@ -49,8 +49,7 @@ impl RateGraph {
                 .map(|(i, rate)| [((i as i32 - total_len) as f64) * self.time_increment, rate])
                 .collect::<Vec<[f64; 2]>>(),
         )
-        .name(&self.name);
-        return graph;
+        .name(&self.name)
     }
 
     /// Reset the graph, deleting all points

@@ -27,7 +27,7 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Self {
-        return Config {
+        Config {
             config_path: PathBuf::from("example.yml"),
             experiment: String::from("Exp"),
             run_number: 0,
@@ -42,7 +42,7 @@ impl Config {
             beam: String::from("16C"),
             energy: 0.0,
             magnetic_field: 0.0,
-        };
+        }
     }
 
     /// Get the path to a configuration table which we will log experiment data to
@@ -61,7 +61,7 @@ impl Config {
         let table_path = table_dir.join(format!("{}.csv", self.experiment));
         if !table_path.exists() {
             if let Ok(mut file) = std::fs::File::create(&table_path) {
-                match file.write(HEADER_STR.as_bytes()) {
+                match file.write_all(HEADER_STR.as_bytes()) {
                     Ok(_) => (),
                     Err(e) => {
                         tracing::error!("Could not write header to config table: {}", e);
@@ -70,7 +70,7 @@ impl Config {
             }
         }
 
-        return table_path;
+        table_path
     }
 
     /// Write experiment data to a log table
@@ -93,11 +93,10 @@ impl Config {
                 self.e_drift,
                 self.e_trans
             );
-            match file.write(row.as_bytes()) {
+            match file.write_all(row.as_bytes()) {
                 Ok(_) => (),
                 Err(e) => {
                     tracing::error!("Could not write row to config table: {}", e);
-                    return;
                 }
             }
         }

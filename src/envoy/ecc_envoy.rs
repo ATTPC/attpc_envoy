@@ -68,12 +68,12 @@ impl ECCConfig {
             _ => format!("{ADDRESS_START}.{}", 60 + id),
         };
         let url = Self::url(&address);
-        return ECCConfig {
+        ECCConfig {
             id,
             experiment: experiment.to_string(),
             address,
             url,
-        };
+        }
     }
 
     /// Compse the xml string defining the ECC configuration
@@ -132,7 +132,7 @@ impl ECCConfig {
     /// Compose the string defining the data source (module)
     fn source(&self) -> String {
         match self.id {
-            MUTANT_ID => format!("Mutant[master]"),
+            MUTANT_ID => String::from("Mutant[master]"),
             _ => format!("CoBo[{}]", self.id),
         }
     }
@@ -183,13 +183,13 @@ impl ECCEnvoy {
             .connect_timeout(connection_out)
             .timeout(req_timeout)
             .build()?;
-        return Ok(Self {
+        Ok(Self {
             config,
             connection: client,
             incoming: rx,
             outgoing: tx,
             cancel,
-        });
+        })
     }
 
     /// This one of the core task loops for an ECCEnvoy. Waits for a
@@ -288,7 +288,7 @@ impl ECCEnvoy {
         let event = reader.read_event()?; //ErrorCode payload
         parsed.error_code = match event {
             quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
-            _ => return Err(EnvoyError::XMLConversionError),
+            _ => return Err(EnvoyError::FailedXMLConvert),
         };
         reader.read_event()?; //ErrorCode end tag
         reader.read_event()?; //ErrorMesage start tag
@@ -336,7 +336,7 @@ impl ECCEnvoy {
         let event = reader.read_event()?; //ErrorCode payload
         parsed.error_code = match event {
             quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
-            _ => return Err(EnvoyError::XMLConversionError),
+            _ => return Err(EnvoyError::FailedXMLConvert),
         };
         reader.read_event()?; //ErrorCode end tag
         reader.read_event()?; //ErrorMesage start tag
@@ -356,14 +356,14 @@ impl ECCEnvoy {
         let event = reader.read_event()?; //State payload
         parsed.state = match event {
             quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
-            _ => return Err(EnvoyError::XMLConversionError),
+            _ => return Err(EnvoyError::FailedXMLConvert),
         };
         reader.read_event()?; //State end tag
         reader.read_event()?; //Transition start tag
         let event = reader.read_event()?; //Transition payload
         parsed.transition = match event {
             quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
-            _ => return Err(EnvoyError::XMLConversionError),
+            _ => return Err(EnvoyError::FailedXMLConvert),
         };
 
         let status_response =
@@ -379,9 +379,9 @@ impl ECCEnvoy {
         let op = ECCOperation::try_from(message.operation)?;
         let config = self.config.compose_config_body();
         let link = self.config.compose_data_link_body();
-        return Ok(format!(
+        Ok(format!(
             "{ECC_SOAP_HEADER}<{op}>\n{config}{link}</{op}>\n{ECC_SOAP_FOOTER}"
-        ));
+        ))
     }
 }
 
@@ -441,5 +441,5 @@ pub fn startup_ecc_envoys(
         handles.push(handle);
     }
 
-    return (handles, transition_switchboard);
+    (handles, transition_switchboard)
 }

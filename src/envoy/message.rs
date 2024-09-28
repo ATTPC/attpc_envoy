@@ -105,10 +105,7 @@ impl TryInto<ECCStatusResponse> for EmbassyMessage {
             MessageKind::ECCStatus => {
                 Ok(serde_yaml::from_str::<ECCStatusResponse>(&self.response)?)
             }
-            _ => Err(Self::Error::MessageKindError(
-                MessageKind::ECCStatus,
-                self.kind,
-            )),
+            _ => Err(Self::Error::InvalidKind(MessageKind::ECCStatus, self.kind)),
         }
     }
 }
@@ -120,7 +117,7 @@ impl TryInto<ECCStatusResponse> for &EmbassyMessage {
             MessageKind::ECCStatus => {
                 Ok(serde_yaml::from_str::<ECCStatusResponse>(&self.response)?)
             }
-            _ => Err(Self::Error::MessageKindError(
+            _ => Err(Self::Error::InvalidKind(
                 MessageKind::ECCStatus,
                 self.kind.clone(),
             )),
@@ -135,7 +132,7 @@ impl TryInto<ECCOperationResponse> for EmbassyMessage {
             MessageKind::ECCOperation => Ok(serde_yaml::from_str::<ECCOperationResponse>(
                 &self.response,
             )?),
-            _ => Err(Self::Error::MessageKindError(
+            _ => Err(Self::Error::InvalidKind(
                 MessageKind::ECCOperation,
                 self.kind,
             )),
@@ -150,7 +147,7 @@ impl TryInto<ECCOperationResponse> for &EmbassyMessage {
             MessageKind::ECCOperation => Ok(serde_yaml::from_str::<ECCOperationResponse>(
                 &self.response,
             )?),
-            _ => Err(Self::Error::MessageKindError(
+            _ => Err(Self::Error::InvalidKind(
                 MessageKind::ECCOperation,
                 self.kind.clone(),
             )),
@@ -163,10 +160,7 @@ impl TryInto<SurveyorResponse> for EmbassyMessage {
     fn try_into(self) -> Result<SurveyorResponse, Self::Error> {
         match self.kind {
             MessageKind::Surveyor => Ok(serde_yaml::from_str::<SurveyorResponse>(&self.response)?),
-            _ => Err(Self::Error::MessageKindError(
-                MessageKind::Surveyor,
-                self.kind,
-            )),
+            _ => Err(Self::Error::InvalidKind(MessageKind::Surveyor, self.kind)),
         }
     }
 }
@@ -176,7 +170,7 @@ impl TryInto<SurveyorResponse> for &EmbassyMessage {
     fn try_into(self) -> Result<SurveyorResponse, Self::Error> {
         match self.kind {
             MessageKind::Surveyor => Ok(serde_yaml::from_str::<SurveyorResponse>(&self.response)?),
-            _ => Err(Self::Error::MessageKindError(
+            _ => Err(Self::Error::InvalidKind(
                 MessageKind::Surveyor,
                 self.kind.clone(),
             )),

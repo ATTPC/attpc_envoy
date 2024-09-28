@@ -63,10 +63,10 @@ pub fn execute(
     run_number: &i32,
 ) -> CommandStatus {
     match command.get_function()(surveyor_data, experiment, run_number) {
-        Ok(stat) => return stat,
+        Ok(stat) => stat,
         Err(e) => {
             tracing::error!("Could not execute command {}: {}", command, e);
-            return CommandStatus::CouldNotExecute;
+            CommandStatus::CouldNotExecute
         }
     }
 }
@@ -113,9 +113,9 @@ pub fn backup_config(
         ])
         .output()?;
     if output.status.success() {
-        return Ok(CommandStatus::Success);
+        Ok(CommandStatus::Success)
     } else {
-        return Ok(CommandStatus::Failure);
+        Ok(CommandStatus::Failure)
     }
 }
 
@@ -137,8 +137,8 @@ pub fn check_run_exists(
         .output()?;
 
     if output.status.success() {
-        return Ok(CommandStatus::Success);
+        Ok(CommandStatus::Success)
     } else {
-        return Ok(CommandStatus::Failure);
+        Ok(CommandStatus::Failure)
     }
 }

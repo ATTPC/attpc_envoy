@@ -54,10 +54,10 @@ impl Embassy {
         let mut messages: Vec<EmbassyMessage> = vec![];
         loop {
             match self.envoy_reciever.try_recv() {
-                Ok(message) => messages.push(message.into()),
+                Ok(message) => messages.push(message),
                 Err(mpsc::error::TryRecvError::Empty) => break,
                 Err(mpsc::error::TryRecvError::Disconnected) => {
-                    return Err(EmbassyError::MessageRecieveError)
+                    return Err(EmbassyError::FailedRecieve)
                 }
             };
         }
@@ -80,5 +80,5 @@ pub fn connect_embassy(
     let embassy = Embassy::new(embassy_rx, ecc_switchboard, cancel_tx);
 
     handles.append(&mut sur_handles);
-    return (embassy, handles);
+    (embassy, handles)
 }

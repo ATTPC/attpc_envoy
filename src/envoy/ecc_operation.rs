@@ -50,32 +50,32 @@ impl std::fmt::Display for ECCStatus {
     }
 }
 
-impl Into<String> for ECCStatus {
-    fn into(self) -> String {
-        String::from(match self {
-            Self::Offline => ECC_OFFLINE_STATUS,
-            Self::Busy => ECC_BUSY_STATUS,
-            Self::Idle => ECC_IDLE_STATUS,
-            Self::Prepared => ECC_PREPARED_STATUS,
-            Self::Described => ECC_DESCRIBED_STATUS,
-            Self::Ready => ECC_READY_STATUS,
-            Self::Running => ECC_RUNNING_STATUS,
-            Self::ErrorStat => ECC_ERROR_STATUS,
-            Self::Inconsistent => ECC_INCONSISTENT_STATUS,
+impl From<ECCStatus> for String {
+    fn from(value: ECCStatus) -> String {
+        String::from(match value {
+            ECCStatus::Offline => ECC_OFFLINE_STATUS,
+            ECCStatus::Busy => ECC_BUSY_STATUS,
+            ECCStatus::Idle => ECC_IDLE_STATUS,
+            ECCStatus::Prepared => ECC_PREPARED_STATUS,
+            ECCStatus::Described => ECC_DESCRIBED_STATUS,
+            ECCStatus::Ready => ECC_READY_STATUS,
+            ECCStatus::Running => ECC_RUNNING_STATUS,
+            ECCStatus::ErrorStat => ECC_ERROR_STATUS,
+            ECCStatus::Inconsistent => ECC_INCONSISTENT_STATUS,
         })
     }
 }
 
-impl Into<i32> for ECCStatus {
-    fn into(self) -> i32 {
-        match self {
-            Self::Offline => 0,
-            Self::Idle => 1,
-            Self::Prepared => 2,
-            Self::Described => 3,
-            Self::Ready => 4,
-            Self::Running => 5,
-            Self::Busy => 6,
+impl From<ECCStatus> for i32 {
+    fn from(value: ECCStatus) -> i32 {
+        match value {
+            ECCStatus::Offline => 0,
+            ECCStatus::Idle => 1,
+            ECCStatus::Prepared => 2,
+            ECCStatus::Described => 3,
+            ECCStatus::Ready => 4,
+            ECCStatus::Running => 5,
+            ECCStatus::Busy => 6,
             _ => -1,
         }
     }
@@ -139,22 +139,18 @@ impl ECCStatus {
 
     /// Can the system with this status progress
     pub fn can_go_forward(&self) -> bool {
-        match self {
-            ECCStatus::Idle => true,
-            ECCStatus::Described => true,
-            ECCStatus::Prepared => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            ECCStatus::Idle | ECCStatus::Described | ECCStatus::Prepared
+        )
     }
 
     /// Can the system with this status regress
     pub fn can_go_backward(&self) -> bool {
-        match self {
-            ECCStatus::Ready => true,
-            ECCStatus::Prepared => true,
-            ECCStatus::Described => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            ECCStatus::Ready | ECCStatus::Prepared | ECCStatus::Described
+        )
     }
 }
 
@@ -204,17 +200,17 @@ impl TryFrom<String> for ECCOperation {
     }
 }
 
-impl Into<String> for ECCOperation {
-    fn into(self) -> String {
-        String::from(match self {
-            Self::Describe => ECC_DESCRIBE_OP,
-            Self::Prepare => ECC_PREPARE_OP,
-            Self::Configure => ECC_CONFIGURE_OP,
-            Self::Start => ECC_START_OP,
-            Self::Undo => ECC_UNDO_OP,
-            Self::Breakup => ECC_BREAKUP_OP,
-            Self::Stop => ECC_STOP_OP,
-            Self::Invalid => ECC_INVALID_OP,
+impl From<ECCOperation> for String {
+    fn from(value: ECCOperation) -> String {
+        String::from(match value {
+            ECCOperation::Describe => ECC_DESCRIBE_OP,
+            ECCOperation::Prepare => ECC_PREPARE_OP,
+            ECCOperation::Configure => ECC_CONFIGURE_OP,
+            ECCOperation::Start => ECC_START_OP,
+            ECCOperation::Undo => ECC_UNDO_OP,
+            ECCOperation::Breakup => ECC_BREAKUP_OP,
+            ECCOperation::Stop => ECC_STOP_OP,
+            ECCOperation::Invalid => ECC_INVALID_OP,
         })
     }
 }

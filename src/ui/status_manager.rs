@@ -23,11 +23,11 @@ impl StatusManager {
         let eccs = vec![ECCStatusResponse::default(); NUMBER_OF_MODULES];
         let surs = vec![SurveyorResponse::default(); NUMBER_OF_MODULES - 1];
         let holds = vec![false; NUMBER_OF_MODULES];
-        return Self {
+        Self {
             ecc_status: eccs,
             surveyor_status: surs,
             ecc_holds: holds,
-        };
+        }
     }
 
     /// Reset the data of all the envoys
@@ -59,7 +59,7 @@ impl StatusManager {
                     } else {
                         tracing::info!("ECC Operation completed for module id {}", module_id);
                     }
-                    self.ecc_holds[module_id as usize] = false;
+                    self.ecc_holds[module_id] = false;
                 }
                 MessageKind::ECCStatus => {
                     let resp: ECCStatusResponse = message.try_into()?;
@@ -72,13 +72,13 @@ impl StatusManager {
                         )
                     }
 
-                    if self.ecc_holds[module_id as usize] == false {
-                        self.ecc_status[module_id as usize] = resp;
+                    if !self.ecc_holds[module_id] {
+                        self.ecc_status[module_id] = resp;
                     }
                 }
                 MessageKind::Surveyor => {
                     let resp: SurveyorResponse = message.try_into()?;
-                    self.surveyor_status[module_id as usize] = resp;
+                    self.surveyor_status[module_id] = resp;
                 }
                 _ => {
                     tracing::warn!("Some how recieved a message of kind {} which is not a valid recieving kind!", message.kind);
@@ -102,79 +102,57 @@ impl StatusManager {
                 return ECCStatus::Inconsistent;
             }
         }
-        return ECCStatus::from(sys_status);
+        ECCStatus::from(sys_status)
     }
 
     /// Is the entire system at the ECC Ready status
     pub fn is_system_ready(&self) -> bool {
         let sys_stat = self.get_system_ecc_status();
-        match sys_stat {
-            ECCStatus::Ready => true,
-            _ => false,
-        }
+        matches!(sys_stat, ECCStatus::Ready)
     }
 
     /// Is the system in an active run state
     pub fn is_system_running(&self) -> bool {
-        let sys_stat = self.get_system_ecc_status();
-        match sys_stat {
-            ECCStatus::Running => true,
-            _ => false,
-        }
+        matches!(self.get_system_ecc_status(), ECCStatus::Running)
     }
 
     /// Are all of the CoBos running, waiting for the MuTaNT
     pub fn is_all_but_mutant_running(&self) -> bool {
         let sys_status = self.ecc_status[0].state;
-        for status in self.ecc_status[..((NUMBER_OF_MODULES - 1) as usize)].iter() {
+        for status in self.ecc_status[..(NUMBER_OF_MODULES - 1)].iter() {
             if sys_status != status.state {
                 return false;
             }
         }
 
-        match ECCStatus::from(sys_status) {
-            ECCStatus::Running => return true,
-            _ => return false,
-        }
+        matches!(ECCStatus::from(sys_status), ECCStatus::Running)
     }
 
     /// Is everyone but the MuTaNT at the Ready status
     pub fn is_all_but_mutant_ready(&self) -> bool {
         let sys_status = self.ecc_status[0].state;
-        for status in self.ecc_status[..((NUMBER_OF_MODULES - 1) as usize)].iter() {
+        for status in self.ecc_status[..(NUMBER_OF_MODULES - 1)].iter() {
             if sys_status != status.state {
                 return false;
             }
         }
 
-        match ECCStatus::from(sys_status) {
-            ECCStatus::Ready => return true,
-            _ => return false,
-        }
+        matches!(ECCStatus::from(sys_status), ECCStatus::Ready)
     }
 
     /// Is the MuTaNT stopped (not running)
     pub fn is_mutant_stopped(&self) -> bool {
-        match self.get_ecc_status(MUTANT_ID as usize) {
-            ECCStatus::Running => return false,
-            _ => return true,
-        }
+        matches!(self.get_ecc_status(MUTANT_ID), ECCStatus::Running)
     }
 
     /// Is the MuTaNT at the Prepared status
     pub fn is_mutant_prepared(&self) -> bool {
-        match self.get_ecc_status(MUTANT_ID as usize) {
-            ECCStatus::Prepared => return true,
-            _ => return false,
-        }
+        matches!(self.get_ecc_status(MUTANT_ID), ECCStatus::Prepared)
     }
 
     /// Is the MuTaNT at the Ready status
     pub fn is_mutant_ready(&self) -> bool {
-        match self.get_ecc_status(MUTANT_ID as usize) {
-            ECCStatus::Ready => return true,
-            _ => return false,
-        }
+        matches!(self.get_ecc_status(MUTANT_ID), ECCStatus::Ready)
     }
 
     /// Returns a slice of all SurveyorResponses (SurveyorEnvoy statuses)
@@ -184,7 +162,7 @@ impl StatusManager {
 
     /// Get the status of a specific ECCEnvoy
     pub fn get_ecc_status(&self, id: usize) -> ECCStatus {
-        return ECCStatus::from(self.ecc_status[id].state);
+        ECCStatus::from(self.ecc_status[id].state)
     }
 
     /// Set a specific ECCEnvoy as Busy
@@ -201,15 +179,14 @@ impl StatusManager {
     pub fn can_ecc_go_forward(&self, id: usize) -> bool {
         let status = self.get_ecc_status(id);
         if status == ECCStatus::Described && id != MUTANT_ID {
-            match self.get_ecc_status(MUTANT_ID) {
-                ECCStatus::Prepared => return true,
-                ECCStatus::Ready => return true,
-                _ => return false,
-            }
+            matches!(
+                self.get_ecc_status(MUTANT_ID),
+                ECCStatus::Prepared | ECCStatus::Ready
+            )
         } else if status == ECCStatus::Prepared && id == MUTANT_ID {
-            return self.is_all_but_mutant_ready();
+            self.is_all_but_mutant_ready()
         } else {
-            return status.can_go_forward();
+            status.can_go_forward()
         }
     }
 
@@ -222,12 +199,12 @@ impl StatusManager {
                 return SurveyorStatus::Inconsistent;
             }
         }
-        return SurveyorStatus::from(sys_status);
+        SurveyorStatus::from(sys_status)
     }
 
     /// Get the status of a specific SurveyorEnvoy
     #[allow(dead_code)]
     pub fn get_surveyor_status(&self, id: usize) -> SurveyorStatus {
-        return SurveyorStatus::from(self.surveyor_status[id].state);
+        SurveyorStatus::from(self.surveyor_status[id].state)
     }
 }

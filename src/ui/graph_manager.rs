@@ -19,7 +19,7 @@ impl GraphManager {
         for i in 0..(NUMBER_OF_MODULES - 1) {
             graphs.push(RateGraph::new(&format!("envoy_{i}"), &max_points));
         }
-        return Self { graphs, max_points };
+        Self { graphs, max_points }
     }
 
     /// Read messages from the embassy, looking for SurveyorResponses. If one is found, send
@@ -28,7 +28,7 @@ impl GraphManager {
         for message in messages {
             match message.kind {
                 MessageKind::Surveyor => {
-                    if let Some(graph) = self.graphs.get_mut(message.id as usize) {
+                    if let Some(graph) = self.graphs.get_mut(message.id) {
                         let response: SurveyorResponse = message.try_into()?;
                         graph.add_point(response.data_rate);
                     }
