@@ -184,7 +184,7 @@ impl EnvoyApp {
                         .embassy
                         .as_mut()
                         .unwrap()
-                        .submit_message(EmbassyMessage::compose_ecc_op(operation.into(), id as i32))
+                        .submit_message(EmbassyMessage::compose_ecc_op(operation.into(), id))
                     {
                         Ok(()) => (),
                         Err(e) => tracing::error!("Embassy had an error sending a message: {}", e),
@@ -199,14 +199,14 @@ impl EnvoyApp {
     /// This is slightly more complicated as order matters for two of the phases (Prepare and Configure)
     fn forward_transition_all(&mut self) {
         let system = self.status.get_system_ecc_status();
-        let all_ids_but_mutant: Vec<usize> = (0..((NUMBER_OF_MODULES - 1) as usize)).collect();
-        let ids: Vec<usize> = (0..(NUMBER_OF_MODULES as usize)).collect();
+        let all_ids_but_mutant: Vec<usize> = (0..(NUMBER_OF_MODULES - 1)).collect();
+        let ids: Vec<usize> = (0..NUMBER_OF_MODULES).collect();
         match system.get_forward_operation() {
             //Describe operation: order doesn't matter
             ECCOperation::Describe => self.transition_ecc(ids, true),
             //Prepare operation: mutant first, then cobos
             ECCOperation::Prepare => {
-                self.transition_ecc(vec![MUTANT_ID as usize], true);
+                self.transition_ecc(vec![MUTANT_ID], true);
                 loop {
                     self.poll_embassy();
                     if self.status.is_mutant_prepared() {
@@ -224,7 +224,7 @@ impl EnvoyApp {
                         break;
                     }
                 }
-                self.transition_ecc(vec![MUTANT_ID as usize], true)
+                self.transition_ecc(vec![MUTANT_ID], true)
             }
             _ => tracing::error!(
                 "Tried to do some illegal forward transition all: {}",
@@ -752,7 +752,7 @@ impl EnvoyApp {
                             let status = &ecc_status[ridx];
                             let ecc_type = ECCStatus::from(status.state);
                             row.col(|ui| {
-                                if (ridx as i32) == MUTANT_ID {
+                                if ridx == MUTANT_ID {
                                     ui.label(
                                         RichText::new(format!("ECC Envoy {} [MuTaNT]", ridx))
                                             .color(Color32::LIGHT_GREEN),

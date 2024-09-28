@@ -20,9 +20,9 @@ pub struct StatusManager {
 impl StatusManager {
     /// Create a new manager with space for the statuses of all envoys
     pub fn new() -> Self {
-        let eccs = vec![ECCStatusResponse::default(); NUMBER_OF_MODULES as usize];
-        let surs = vec![SurveyorResponse::default(); (NUMBER_OF_MODULES - 1) as usize];
-        let holds = vec![false; NUMBER_OF_MODULES as usize];
+        let eccs = vec![ECCStatusResponse::default(); NUMBER_OF_MODULES];
+        let surs = vec![SurveyorResponse::default(); NUMBER_OF_MODULES - 1];
+        let holds = vec![false; NUMBER_OF_MODULES];
         return Self {
             ecc_status: eccs,
             surveyor_status: surs,
@@ -189,7 +189,7 @@ impl StatusManager {
 
     /// Set a specific ECCEnvoy as Busy
     pub fn set_ecc_busy(&mut self, id: usize) {
-        if id as i32 > MUTANT_ID {
+        if id > MUTANT_ID {
             return;
         }
 
@@ -200,13 +200,13 @@ impl StatusManager {
     /// Check if an ECCEnvoy can go forward (progress)
     pub fn can_ecc_go_forward(&self, id: usize) -> bool {
         let status = self.get_ecc_status(id);
-        if status == ECCStatus::Described && id != (MUTANT_ID as usize) {
-            match self.get_ecc_status(MUTANT_ID as usize) {
+        if status == ECCStatus::Described && id != MUTANT_ID {
+            match self.get_ecc_status(MUTANT_ID) {
                 ECCStatus::Prepared => return true,
                 ECCStatus::Ready => return true,
                 _ => return false,
             }
-        } else if status == ECCStatus::Prepared && id == (MUTANT_ID as usize) {
+        } else if status == ECCStatus::Prepared && id == MUTANT_ID {
             return self.is_all_but_mutant_ready();
         } else {
             return status.can_go_forward();

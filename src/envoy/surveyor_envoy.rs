@@ -45,20 +45,20 @@ impl Default for SurveyorResponse {
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct SurveyorConfig {
-    id: i32,
+    id: usize,
     address: String,
     url: String,
 }
 
 impl SurveyorConfig {
-    pub fn new(id: i32) -> Self {
+    pub fn new(id: usize) -> Self {
         let address = Self::address(&id);
         let url = Self::url(&address);
 
         Self { id, address, url }
     }
 
-    fn address(id: &i32) -> String {
+    fn address(id: &usize) -> String {
         format!("{ADDRESS_START}.{}", 60 + id)
     }
 

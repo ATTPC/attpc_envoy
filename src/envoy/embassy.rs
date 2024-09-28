@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 /// two runtimes.
 #[derive(Debug)]
 pub struct Embassy {
-    ecc_senders: HashMap<i32, mpsc::Sender<EmbassyMessage>>,
+    ecc_senders: HashMap<usize, mpsc::Sender<EmbassyMessage>>,
     envoy_reciever: mpsc::Receiver<EmbassyMessage>,
     cancel: broadcast::Sender<EmbassyMessage>,
 }
@@ -21,7 +21,7 @@ impl Embassy {
     /// Create an Embassy with some communication channels
     pub fn new(
         envoy_reciever: mpsc::Receiver<EmbassyMessage>,
-        ecc_senders: HashMap<i32, mpsc::Sender<EmbassyMessage>>,
+        ecc_senders: HashMap<usize, mpsc::Sender<EmbassyMessage>>,
         cancel: broadcast::Sender<EmbassyMessage>,
     ) -> Self {
         Embassy {

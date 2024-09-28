@@ -54,7 +54,7 @@ pub struct ECCStatusResponse {
 /// Struct defining a minimal getECCServer configuration
 #[derive(Debug, Clone)]
 pub struct ECCConfig {
-    id: i32,
+    id: usize,
     experiment: String,
     address: String,
     url: String,
@@ -62,7 +62,7 @@ pub struct ECCConfig {
 
 impl ECCConfig {
     /// Create a ECC config from an experiment name and module ID
-    pub fn new(id: i32, experiment: &str) -> ECCConfig {
+    pub fn new(id: usize, experiment: &str) -> ECCConfig {
         let address = match id {
             MUTANT_ID => format!("{ADDRESS_START}.1"),
             _ => format!("{ADDRESS_START}.{}", 60 + id),
@@ -395,7 +395,7 @@ pub fn startup_ecc_envoys(
     cancel: &broadcast::Sender<EmbassyMessage>,
 ) -> (
     Vec<JoinHandle<()>>,
-    HashMap<i32, mpsc::Sender<EmbassyMessage>>,
+    HashMap<usize, mpsc::Sender<EmbassyMessage>>,
 ) {
     let mut transition_switchboard = HashMap::new();
     let mut handles: Vec<JoinHandle<()>> = vec![];

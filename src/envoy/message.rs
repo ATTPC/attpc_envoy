@@ -6,12 +6,10 @@ const MESSAGE_EMPTY_FIELD: &str = "None";
 
 /// Types of messages the Embassy might recieve
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub enum MessageKind {
     ECCOperation,
     ECCStatus,
     Surveyor,
-    Other,
     Cancel,
 }
 
@@ -21,7 +19,6 @@ impl std::fmt::Display for MessageKind {
             Self::ECCOperation => write!(f, "ECCOperation"),
             Self::ECCStatus => write!(f, "ECCStatus"),
             Self::Surveyor => write!(f, "Surveyor"),
-            Self::Other => write!(f, "Other"),
             Self::Cancel => write!(f, "Cancel"),
         }
     }
@@ -34,7 +31,7 @@ impl std::fmt::Display for MessageKind {
 #[derive(Debug, Clone)]
 pub struct EmbassyMessage {
     pub kind: MessageKind,
-    pub id: i32,
+    pub id: usize,
     pub operation: String,
     pub response: String,
 }
@@ -51,7 +48,7 @@ impl std::fmt::Display for EmbassyMessage {
 
 impl EmbassyMessage {
     /// Compose an EmbassyMessage from a SurveyorEnvoy status response
-    pub fn compose_surveyor_response(response: String, id: i32) -> Self {
+    pub fn compose_surveyor_response(response: String, id: usize) -> Self {
         EmbassyMessage {
             kind: MessageKind::Surveyor,
             id,
@@ -61,7 +58,7 @@ impl EmbassyMessage {
     }
 
     /// Compose an EmbassyMessage from an ECCOperation request
-    pub fn compose_ecc_op(operation: String, id: i32) -> Self {
+    pub fn compose_ecc_op(operation: String, id: usize) -> Self {
         EmbassyMessage {
             kind: MessageKind::ECCOperation,
             id,
@@ -71,7 +68,7 @@ impl EmbassyMessage {
     }
 
     /// Compose an EmbassyMessage from an ECCOperation response
-    pub fn compose_ecc_response(response: String, id: i32) -> Self {
+    pub fn compose_ecc_response(response: String, id: usize) -> Self {
         EmbassyMessage {
             kind: MessageKind::ECCOperation,
             id,
@@ -81,7 +78,7 @@ impl EmbassyMessage {
     }
 
     /// Compose an EmbassyMessage from an ECC status response
-    pub fn compose_ecc_status(response: String, id: i32) -> Self {
+    pub fn compose_ecc_status(response: String, id: usize) -> Self {
         EmbassyMessage {
             kind: MessageKind::ECCStatus,
             id,
