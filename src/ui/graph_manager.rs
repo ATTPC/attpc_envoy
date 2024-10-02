@@ -49,7 +49,7 @@ impl GraphManager {
             self.time_points.pop_front();
         }
         self.time_points.push_back(ellapsed_time.as_secs_f64());
-        for (id, status) in statuses.into_iter().enumerate() {
+        for (id, status) in statuses.iter().enumerate() {
             if let Some(graph) = self.graphs.get_mut(id) {
                 graph.add_point(status.data_rate);
             }

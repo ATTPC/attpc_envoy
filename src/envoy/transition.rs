@@ -54,6 +54,8 @@ pub fn transition_ecc(
     }
 }
 
+/// Send the mutant forward from described to prepared and block on waiting
+/// until that transition is complete
 pub fn forward_mutant_prepared_blocking(
     embassy: &mut Embassy,
     status_manager: &mut StatusManager,
@@ -68,6 +70,8 @@ pub fn forward_mutant_prepared_blocking(
     Ok(())
 }
 
+/// Send all of the CoBos forward from prepared to Ready (Configure transition) and
+/// block on waiting until all of those transitions are complete
 pub fn forward_cobos_ready_blocking(
     embassy: &mut Embassy,
     status_manager: &mut StatusManager,
@@ -96,29 +100,31 @@ pub fn forward_transition_all(
         //Describe operation: order doesn't matter
         ECCOperation::Describe => {
             transition_ecc(embassy, status_manager, ids, true);
-            return Ok(());
+            Ok(())
         }
         //Prepare operation: mutant first, then cobos
         ECCOperation::Prepare => {
             forward_mutant_prepared_blocking(embassy, status_manager)?;
             transition_ecc(embassy, status_manager, all_ids_but_mutant, true);
-            return Ok(());
+            Ok(())
         }
         //Configure operation: cobos first, then mutant
         ECCOperation::Configure => {
             forward_cobos_ready_blocking(embassy, status_manager)?;
             transition_ecc(embassy, status_manager, vec![MUTANT_ID], true);
-            return Ok(());
+            Ok(())
         }
-        e => return Err(EmbassyError::InvalidTransition(e)),
-    };
+        e => Err(EmbassyError::InvalidTransition(e)),
+    }
 }
 
+/// Transition all of the envoys backwards (Regresss)
 pub fn backward_transition_all(embassy: &mut Embassy, status_manager: &mut StatusManager) {
     let ids: Vec<usize> = (0..(NUMBER_OF_MODULES)).collect();
     transition_ecc(embassy, status_manager, ids, false);
 }
 
+/// Start the MuTaNT
 pub fn start_mutant(embassy: &mut Embassy) -> Result<(), EmbassyError> {
     embassy.submit_message(EmbassyMessage::compose_ecc_op(
         ECCOperation::Start.into(),
@@ -126,6 +132,9 @@ pub fn start_mutant(embassy: &mut Embassy) -> Result<(), EmbassyError> {
     ))
 }
 
+/// Reconfigure the MuTaNT (Regress once, and then Configure again) to
+/// restart the event numbers and timestamps. This is used when starting
+/// a new run.
 pub fn reconfigure_mutant_blocking(
     embassy: &mut Embassy,
     status_manager: &mut StatusManager,
@@ -148,6 +157,7 @@ pub fn reconfigure_mutant_blocking(
     Ok(())
 }
 
+/// Stop the MuTaNT and wait until that is completed
 pub fn stop_mutant_blocking(
     embassy: &mut Embassy,
     status_manager: &mut StatusManager,
@@ -168,6 +178,7 @@ pub fn stop_mutant_blocking(
     Ok(())
 }
 
+/// Start all of the CoBos and wait until that is completed
 pub fn start_cobos_blocking(
     embassy: &mut Embassy,
     status_manager: &mut StatusManager,
@@ -189,6 +200,7 @@ pub fn start_cobos_blocking(
     Ok(())
 }
 
+/// Stop all of the CoBos
 pub fn stop_cobos(embassy: &mut Embassy) -> Result<(), EmbassyError> {
     for id in 0..(NUMBER_OF_MODULES - 1) {
         embassy.submit_message(EmbassyMessage::compose_ecc_op(
