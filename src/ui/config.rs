@@ -1,5 +1,7 @@
+use super::error::ConfigError;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::fs::File;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
 const HEADER_STR: &str = "Run,Duration(s),Note,Gas,Beam,Energy(MeV/U),Pressure(Torr),B-Field(T),V_THGEM(V),V_MM(V),V_Cathode(kV),E-Drift(V),E-Trans(V)\n";
@@ -8,7 +10,7 @@ const HEADER_STR: &str = "Run,Duration(s),Note,Gas,Beam,Energy(MeV/U),Pressure(T
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     #[serde(skip)]
-    pub config_path: PathBuf,
+    pub path: PathBuf,
 
     pub experiment: String,
     pub run_number: i32,
@@ -28,7 +30,7 @@ pub struct Config {
 impl Config {
     pub fn new() -> Self {
         Config {
-            config_path: PathBuf::from("example.yml"),
+            path: PathBuf::from("example.yml"),
             experiment: String::from("Exp"),
             run_number: 0,
             description: String::from("Write here"),
@@ -43,6 +45,22 @@ impl Config {
             energy: 0.0,
             magnetic_field: 0.0,
         }
+    }
+
+    pub fn save(&self) -> Result<(), ConfigError> {
+        let mut file = File::create(&self.path)?;
+        let yaml_str = serde_yaml::to_string::<Config>(&self)?;
+        file.write_all(yaml_str.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn load(&mut self, path: PathBuf) -> Result<(), ConfigError> {
+        let mut file = File::open(&path)?;
+        let mut yaml_str = String::new();
+        file.read_to_string(&mut yaml_str)?;
+        *self = serde_yaml::from_str::<Config>(&yaml_str)?;
+        self.path = path;
+        Ok(())
     }
 
     /// Get the path to a configuration table which we will log experiment data to
