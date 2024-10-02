@@ -8,8 +8,6 @@ use std::collections::VecDeque;
 pub struct RateGraph {
     points: VecDeque<f64>,
     max_points: usize,
-    last_time: f64,
-    time_increment: f64,
     name: String,
 }
 
@@ -21,8 +19,6 @@ impl RateGraph {
         Self {
             points: VecDeque::new(),
             max_points: *max_points,
-            last_time: 0.0,
-            time_increment: 2.0,
             name: String::from(name),
         }
     }
@@ -32,21 +28,16 @@ impl RateGraph {
         if self.points.len() == self.max_points {
             self.points.pop_front();
         }
-        let current_time = self.last_time + self.time_increment;
         self.points.push_back(rate);
-        self.last_time = current_time;
     }
 
     /// Convert the data to a egui_plot::Line.
-    pub fn get_points_to_draw(&self) -> Line {
-        let total_len = self.points.len() as i32 - 1;
+    pub fn get_points_to_draw(&self, times: &VecDeque<f64>) -> Line {
         Line::new(
-            self.points
-                .clone()
-                .into_iter()
-                .enumerate()
-                .rev()
-                .map(|(i, rate)| [((i as i32 - total_len) as f64) * self.time_increment, rate])
+            times
+                .iter()
+                .zip(self.points.iter())
+                .map(|(time, rate)| [*time, *rate])
                 .collect::<Vec<[f64; 2]>>(),
         )
         .name(&self.name)
@@ -55,7 +46,6 @@ impl RateGraph {
     /// Reset the graph, deleting all points
     pub fn reset(&mut self) {
         self.points.clear();
-        self.last_time = 0.0;
     }
 
     /// Change the maximum number of points the graph can have

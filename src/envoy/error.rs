@@ -1,4 +1,7 @@
-use super::message::{EmbassyMessage, MessageKind};
+use super::{
+    ecc_operation::ECCOperation,
+    message::{EmbassyMessage, MessageKind},
+};
 use tokio::sync::mpsc::error::SendError;
 
 #[derive(Debug)]
@@ -132,6 +135,8 @@ pub enum EmbassyError {
     InvalidKind(MessageKind, MessageKind),
     FailedParse(serde_yaml::Error),
     FailedRecieve,
+    FailedJoin(tokio::task::JoinError),
+    InvalidTransition(ECCOperation),
 }
 
 impl From<SendError<EmbassyMessage>> for EmbassyError {
@@ -143,6 +148,12 @@ impl From<SendError<EmbassyMessage>> for EmbassyError {
 impl From<serde_yaml::Error> for EmbassyError {
     fn from(value: serde_yaml::Error) -> Self {
         Self::FailedParse(value)
+    }
+}
+
+impl From<tokio::task::JoinError> for EmbassyError {
+    fn from(value: tokio::task::JoinError) -> Self {
+        Self::FailedJoin(value)
     }
 }
 
@@ -160,6 +171,8 @@ impl std::fmt::Display for EmbassyError {
             Self::FailedRecieve => {
                 write!(f, "Embassy communication lines were disconnected!")
             }
+            Self::FailedJoin(e) => write!(f, "Embassy failed to join a task: {e}"),
+            Self::InvalidTransition(op) => write!(f, "Attempted invalid transition: {op}"),
         }
     }
 }

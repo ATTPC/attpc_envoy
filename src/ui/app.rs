@@ -1,15 +1,17 @@
 use super::config::Config;
 use super::graph_manager::GraphManager;
-use super::status_manager::StatusManager;
+use super::time_format::pretty_ellapsed_time;
 use crate::command::bash_command::{execute, CommandName, CommandStatus};
-use crate::envoy::constants::{MUTANT_ID, NUMBER_OF_MODULES};
-use crate::envoy::ecc_operation::{ECCOperation, ECCStatus};
-use crate::envoy::embassy::{connect_embassy, Embassy};
-use crate::envoy::message::EmbassyMessage;
+use crate::envoy::constants::MUTANT_ID;
+use crate::envoy::ecc_operation::ECCStatus;
+use crate::envoy::embassy::Embassy;
+use crate::envoy::status_manager::StatusManager;
 use crate::envoy::surveyor_status::{SurveyorDiskStatus, SurveyorStatus};
+use crate::envoy::transition::*;
 
 use eframe::egui::widgets::Button;
 use eframe::egui::widgets::DragValue;
+use eframe::egui::{CentralPanel, SidePanel, TopBottomPanel};
 use eframe::egui::{Color32, RichText};
 use std::fs::File;
 use std::io::{Read, Write};
@@ -23,9 +25,7 @@ const DEFAULT_TEXT_COLOR: Color32 = Color32::LIGHT_GRAY;
 #[derive(Debug)]
 pub struct EnvoyApp {
     config: Config,
-    runtime: tokio::runtime::Runtime,
-    embassy: Option<Embassy>,
-    envoy_handles: Option<Vec<tokio::task::JoinHandle<()>>>,
+    embassy: Embassy,
     status: StatusManager,
     graphs: GraphManager,
     max_graph_points: usize,
@@ -44,11 +44,9 @@ impl EnvoyApp {
         cc.egui_ctx.set_visuals(visuals);
         EnvoyApp {
             config: Config::new(),
-            runtime,
-            embassy: None,
-            envoy_handles: None,
+            embassy: Embassy::new(runtime),
             status: StatusManager::new(),
-            graphs: GraphManager::new(10),
+            graphs: GraphManager::new(10, 2),
             max_graph_points: 10,
             run_start_time: Instant::now(),
             run_duration: Duration::from_secs(0),
@@ -100,141 +98,27 @@ impl EnvoyApp {
 
     /// Create all of the envoys, the embassy, and start the async tasks
     fn connect(&mut self) {
-        if self.embassy.is_none() && self.envoy_handles.is_none() {
-            let (em, handles) = connect_embassy(&mut self.runtime, &self.config.experiment);
-            tracing::info!("Connnected with {} tasks spawned", handles.len());
-            self.embassy = Some(em);
-            self.envoy_handles = Some(handles);
+        if !self.embassy.is_running() {
+            self.embassy.startup(&self.config.experiment);
+            tracing::info!(
+                "Connnected with {} tasks spawned",
+                self.embassy.number_of_tasks()
+            );
         }
     }
 
     /// Emit a cancel signal to all of the envoys and destroy the envoys and the embassy
     /// This can cause a small blocking period while waiting for all of the tasks to join back.
     fn disconnect(&mut self) {
-        if self.embassy.is_some() {
-            let mut embassy = self.embassy.take().expect("Literally cant happen");
-            embassy.shutdown();
-            let handles = self
-                .envoy_handles
-                .take()
-                .expect("Handles did not exist at disconnect?");
-            for handle in handles {
-                match self.runtime.block_on(handle) {
-                    Ok(()) => (),
-                    Err(e) => tracing::error!("Encountered an error whilst disconnecting: {}", e),
-                }
+        if self.embassy.is_running() {
+            match self.embassy.shutdown() {
+                Ok(()) => (),
+                Err(e) => tracing::error!("Failed to stop the embassy: {e}"),
             }
-            tracing::info!("Disconnected the embassy");
             self.status.reset();
+            tracing::info!("Disconnected the embassy");
             tracing::info!("Status manager reset.")
         }
-    }
-
-    /// Read and handle any messages the embassy recieved from the envoys. Messages are sent
-    /// to observer like structures (the StatusManager and GraphManager)
-    fn poll_embassy(&mut self) {
-        if let Some(embassy) = self.embassy.as_mut() {
-            match embassy.poll_messages() {
-                Ok(messages) => {
-                    match self.status.handle_messages(&messages) {
-                        Ok(_) => (),
-                        Err(e) => tracing::error!(
-                            "StatusManager ran into an error handling messages: {}",
-                            e
-                        ),
-                    };
-                    match self.graphs.handle_messages(&messages) {
-                        Ok(_) => (),
-                        Err(e) => tracing::error!(
-                            "GraphManager ran into an error handling messages: {}",
-                            e
-                        ),
-                    }
-                }
-                Err(e) => tracing::error!("Embassy ran into an error polling the envoys: {}", e),
-            };
-        }
-    }
-
-    /// Send a transition command to some of the ECC operation envoys. Transitions are either forward or backward
-    /// depending on the is_forward flag. What type of transition is determined by the current state of the envoy as last recorded
-    /// by the status envoy.
-    fn transition_ecc(&mut self, ids: Vec<usize>, is_forward: bool) {
-        if ids.is_empty() {
-            return;
-        }
-
-        if self.embassy.is_none() {
-            tracing::error!("Some how trying to operate on ECC whilst disconnected!");
-            return;
-        }
-        for id in ids {
-            let status = &self.status.get_ecc_status(id);
-            let operation: ECCOperation = if is_forward {
-                status.get_forward_operation()
-            } else {
-                status.get_backward_operation()
-            };
-            match operation {
-                ECCOperation::Invalid => (),
-                _ => {
-                    match self
-                        .embassy
-                        .as_mut()
-                        .unwrap()
-                        .submit_message(EmbassyMessage::compose_ecc_op(operation.into(), id))
-                    {
-                        Ok(()) => (),
-                        Err(e) => tracing::error!("Embassy had an error sending a message: {}", e),
-                    }
-                }
-            }
-            self.status.set_ecc_busy(id);
-        }
-    }
-
-    /// Transition all of the envoys forward (Progress)
-    /// This is slightly more complicated as order matters for two of the phases (Prepare and Configure)
-    fn forward_transition_all(&mut self) {
-        let system = self.status.get_system_ecc_status();
-        let all_ids_but_mutant: Vec<usize> = (0..(NUMBER_OF_MODULES - 1)).collect();
-        let ids: Vec<usize> = (0..NUMBER_OF_MODULES).collect();
-        match system.get_forward_operation() {
-            //Describe operation: order doesn't matter
-            ECCOperation::Describe => self.transition_ecc(ids, true),
-            //Prepare operation: mutant first, then cobos
-            ECCOperation::Prepare => {
-                self.transition_ecc(vec![MUTANT_ID], true);
-                loop {
-                    self.poll_embassy();
-                    if self.status.is_mutant_prepared() {
-                        break;
-                    }
-                }
-                self.transition_ecc(all_ids_but_mutant, true)
-            }
-            //Configure operation: cobos first, then mutant
-            ECCOperation::Configure => {
-                self.transition_ecc(all_ids_but_mutant, true);
-                loop {
-                    self.poll_embassy();
-                    if self.status.is_all_but_mutant_ready() {
-                        break;
-                    }
-                }
-                self.transition_ecc(vec![MUTANT_ID], true)
-            }
-            _ => tracing::error!(
-                "Tried to do some illegal forward transition all: {}",
-                system.get_forward_operation()
-            ),
-        }
-    }
-
-    /// Transition all of the envoys backward (Regress)
-    fn backward_transition_all(&mut self) {
-        let ids: Vec<usize> = (0..(NUMBER_OF_MODULES)).collect();
-        self.transition_ecc(ids, false)
     }
 
     /// Send a start run command to all of the envoys.
@@ -243,8 +127,6 @@ impl EnvoyApp {
     /// does the Mutant start. The rate graphs are also reset.
     fn start_run(&mut self) {
         //Order is all cobos, then mutant
-        let operation = ECCOperation::Start;
-        self.graphs.reset_graphs();
 
         //Check the run number status using the shell scripting engine
         tracing::info!("Starting run {} ...", self.config.run_number);
@@ -265,66 +147,32 @@ impl EnvoyApp {
         tracing::info!("Run number validated.");
 
         tracing::info!("Re-configuring MuTaNT to reset timestamps...");
-        self.transition_ecc(vec![MUTANT_ID], false);
-        loop {
-            self.poll_embassy();
-            if self.status.is_mutant_prepared() {
-                break;
-            }
-        }
-        self.transition_ecc(vec![MUTANT_ID], true);
-        loop {
-            self.poll_embassy();
-            if self.status.is_mutant_ready() {
-                break;
-            }
+        match reconfigure_mutant_blocking(&mut self.embassy, &mut self.status) {
+            Ok(()) => (),
+            Err(e) => tracing::error!("An error occured reconfiguring MuTaNT: {}", e),
         }
         tracing::info!("MuTaNT is re-configured. Proceeding.");
 
         tracing::info!("Starting CoBos...");
         //Start CoBos
-        for id in 0..(NUMBER_OF_MODULES - 1) {
-            match self
-                .embassy
-                .as_mut()
-                .unwrap()
-                .submit_message(EmbassyMessage::compose_ecc_op(operation.clone().into(), id))
-            {
-                Ok(()) => (),
-                Err(e) => {
-                    tracing::error!("Embassy had an error sending a start run message: {}", e)
-                }
-            }
-        }
-
-        //Wait for good CoBo status
-        loop {
-            self.poll_embassy();
-            if self.status.is_all_but_mutant_running() {
-                break;
-            }
+        match start_cobos_blocking(&mut self.embassy, &mut self.status) {
+            Ok(()) => (),
+            Err(e) => tracing::error!("An error occured starting the CoBos: {}", e),
         }
 
         tracing::info!("CoBos started.");
 
         tracing::info!("Starting MuTaNT...");
-        //Start mutant
-        match self
-            .embassy
-            .as_mut()
-            .unwrap()
-            .submit_message(EmbassyMessage::compose_ecc_op(
-                operation.clone().into(),
-                MUTANT_ID,
-            )) {
+        match start_mutant(&mut self.embassy) {
             Ok(()) => (),
-            Err(e) => tracing::error!("Embassy had an error sending a start run message: {}", e),
+            Err(e) => tracing::error!("An error occured starting the MuTaNT: {}", e),
         }
         tracing::info!("MuTaNT started.");
         tracing::info!("Run {} successfully started!", self.config.run_number);
 
         //Update run start time
         self.run_start_time = Instant::now();
+        self.graphs.reset();
     }
 
     /// Send a stop run command to all of the envoys.
@@ -333,46 +181,22 @@ impl EnvoyApp {
     /// as well as a command to back up the ECC configuration files.
     fn stop_run(&mut self) {
         //Order is mutant, all cobos
-        let operation = ECCOperation::Stop;
-
         tracing::info!("Stopping run {} ...", self.config.run_number);
         tracing::info!("Stopping the MuTaNT...");
         //Stop the mutant
-        match self
-            .embassy
-            .as_mut()
-            .unwrap()
-            .submit_message(EmbassyMessage::compose_ecc_op(
-                operation.clone().into(),
-                MUTANT_ID,
-            )) {
+        match stop_mutant_blocking(&mut self.embassy, &mut self.status) {
             Ok(()) => (),
-            Err(e) => tracing::error!("Embassy had an error sending a stop run message: {}", e),
-        }
-
-        //Wait for mutant to stop
-        loop {
-            self.poll_embassy();
-            if self.status.is_mutant_stopped() {
-                break;
-            }
+            Err(e) => tracing::error!("Embassy had an error stopping the MuTaNT: {}", e),
         }
 
         tracing::info!("MuTaNT stopped.");
         tracing::info!("Stopping CoBos...");
 
         //Stop all of the CoBos
-        for id in 0..(NUMBER_OF_MODULES - 1) {
-            match self
-                .embassy
-                .as_mut()
-                .unwrap()
-                .submit_message(EmbassyMessage::compose_ecc_op(operation.clone().into(), id))
-            {
-                Ok(()) => (),
-                Err(e) => {
-                    tracing::error!("Embassy had an error sending a start run message: {}", e)
-                }
+        match stop_cobos(&mut self.embassy) {
+            Ok(()) => (),
+            Err(e) => {
+                tracing::error!("Embassy had an error stoppging the CoBos: {}", e)
             }
         }
 
@@ -431,7 +255,14 @@ impl EnvoyApp {
 impl eframe::App for EnvoyApp {
     fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
         //Probably don't want to poll every frame, but as a test...
-        self.poll_embassy();
+        match poll_embassy(&mut self.embassy, &mut self.status) {
+            Ok(()) => (),
+            Err(e) => tracing::error!("An error occurred when polling the embassy: {}", e),
+        }
+        if self.graphs.should_update() && self.embassy.is_running() {
+            self.graphs
+                .update(self.status.get_surveyor_status_response());
+        }
         self.render_config_panel(ctx);
         self.render_graph_panel(ctx);
         self.render_ecc_panel(ctx);
@@ -449,7 +280,7 @@ impl eframe::App for EnvoyApp {
 impl EnvoyApp {
     ///Render the configuration panel (top panel in the UI)
     fn render_config_panel(&mut self, ctx: &eframe::egui::Context) {
-        eframe::egui::TopBottomPanel::top("Config_Panel").show(ctx, |ui| {
+        TopBottomPanel::top("Config_Panel").show(ctx, |ui| {
             //Drop down menu
             ui.menu_button(RichText::new("File").size(16.0), |ui| {
                 if ui.button(RichText::new("Save").size(14.0)).clicked() {
@@ -566,7 +397,7 @@ impl EnvoyApp {
                 );
                 if ui
                     .add_enabled(
-                        self.embassy.is_none(),
+                        !self.embassy.is_running(),
                         Button::new(
                             RichText::new("Connect")
                                 .color(Color32::LIGHT_BLUE)
@@ -580,7 +411,7 @@ impl EnvoyApp {
                 }
                 if ui
                     .add_enabled(
-                        self.embassy.is_some(),
+                        self.embassy.is_running(),
                         Button::new(
                             RichText::new("Disconnect")
                                 .color(Color32::LIGHT_RED)
@@ -628,15 +459,10 @@ impl EnvoyApp {
                 if self.status.is_system_running() {
                     self.run_duration = Instant::now() - self.run_start_time;
                 }
-                let mut secs = self.run_duration.as_secs();
-                let hrs = ((secs as f64) / 3600.0).floor() as u64;
-                secs -= hrs * 3600;
-                let mins = ((secs as f64) / 60.0).floor() as u64;
-                secs -= mins * 60;
                 ui.label(
                     RichText::new(format!(
-                        "Duration(hrs:mins:ss): {:02}:{:02}:{:02}",
-                        hrs, mins, secs
+                        "Duration(hrs:mins:ss): {}",
+                        pretty_ellapsed_time(self.run_duration.as_secs())
                     ))
                     .size(16.0)
                     .color(Color32::LIGHT_BLUE),
@@ -648,7 +474,7 @@ impl EnvoyApp {
 
     ///Render the graph panel, the bottom of the UI
     fn render_graph_panel(&mut self, ctx: &eframe::egui::Context) {
-        eframe::egui::TopBottomPanel::bottom("Graph_Panel").show(ctx, |ui| {
+        TopBottomPanel::bottom("Graph_Panel").show(ctx, |ui| {
             ui.separator();
             let lines = self.graphs.get_line_graphs();
             ui.label(
@@ -682,7 +508,7 @@ impl EnvoyApp {
 
     /// Render the ECC envoy control panel, the left side panel in the ui
     fn render_ecc_panel(&mut self, ctx: &eframe::egui::Context) {
-        eframe::egui::SidePanel::left("ECC_Panel").show(ctx, |ui| {
+        SidePanel::left("ECC_Panel").show(ctx, |ui| {
             ui.label(
                 RichText::new("ECC Envoy Status/Control")
                     .color(Color32::LIGHT_BLUE)
@@ -704,7 +530,7 @@ impl EnvoyApp {
                     )
                     .clicked()
                 {
-                    self.backward_transition_all();
+                    backward_transition_all(&mut self.embassy, &mut self.status);
                 }
                 ui.label(RichText::new("Progress system").size(16.0));
                 if ui
@@ -714,7 +540,13 @@ impl EnvoyApp {
                     )
                     .clicked()
                 {
-                    self.forward_transition_all();
+                    match forward_transition_all(&mut self.embassy, &mut self.status) {
+                        Ok(()) => (),
+                        Err(e) => tracing::error!(
+                            "An error occurred attempting to transition the system state: {}",
+                            e
+                        ),
+                    }
                 }
             });
             ui.separator();
@@ -793,14 +625,24 @@ impl EnvoyApp {
                     });
                 ui.separator();
             });
-            self.transition_ecc(forward_transitions, true);
-            self.transition_ecc(backward_transitions, false);
+            transition_ecc(
+                &mut self.embassy,
+                &mut self.status,
+                forward_transitions,
+                true,
+            );
+            transition_ecc(
+                &mut self.embassy,
+                &mut self.status,
+                backward_transitions,
+                false,
+            );
         });
     }
 
     /// Render the panel displaying data router status, this is the central panel in the UI
     fn render_data_router_panel(&mut self, ctx: &eframe::egui::Context) {
-        eframe::egui::CentralPanel::default().show(ctx, |ui| {
+        CentralPanel::default().show(ctx, |ui| {
             let surv_system_stat = self.status.get_surveyor_system_status();
             ui.label(
                 RichText::new("Data Router Status")
