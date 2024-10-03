@@ -19,7 +19,7 @@ pub struct Embassy {
     cancel: Option<broadcast::Sender<EmbassyMessage>>,
     handles: Option<Vec<JoinHandle<()>>>,
     runtime: Runtime,
-    is_running: bool,
+    is_connected: bool,
 }
 
 impl Embassy {
@@ -31,7 +31,7 @@ impl Embassy {
             cancel: None,
             handles: None,
             runtime: rt,
-            is_running: false,
+            is_connected: false,
         }
     }
 
@@ -46,7 +46,7 @@ impl Embassy {
         self.ecc_senders = ecc_switchboard;
         self.envoy_reciever = Some(embassy_rx);
         self.cancel = Some(cancel_tx);
-        self.is_running = true;
+        self.is_connected = true;
         self.handles = Some(handles);
     }
 
@@ -92,8 +92,8 @@ impl Embassy {
         Ok(messages)
     }
 
-    pub fn is_running(&self) -> bool {
-        self.is_running
+    pub fn is_connected(&self) -> bool {
+        self.is_connected
     }
 
     pub fn number_of_tasks(&self) -> usize {

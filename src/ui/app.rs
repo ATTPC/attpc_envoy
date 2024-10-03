@@ -45,7 +45,7 @@ impl EnvoyApp {
 
     /// Create all of the envoys, the embassy, and start the async tasks
     pub fn connect(&mut self) {
-        if !self.embassy.is_running() {
+        if !self.embassy.is_connected() {
             self.embassy.startup(&self.config.experiment);
             tracing::info!(
                 "Connnected with {} tasks spawned",
@@ -57,7 +57,7 @@ impl EnvoyApp {
     /// Emit a cancel signal to all of the envoys and destroy the envoys and the embassy
     /// This can cause a small blocking period while waiting for all of the tasks to join back.
     pub fn disconnect(&mut self) {
-        if self.embassy.is_running() {
+        if self.embassy.is_connected() {
             match self.embassy.shutdown() {
                 Ok(()) => (),
                 Err(e) => tracing::error!("Failed to stop the embassy: {e}"),
@@ -208,7 +208,7 @@ impl eframe::App for EnvoyApp {
             Ok(()) => (),
             Err(e) => tracing::error!("An error occurred when polling the embassy: {}", e),
         }
-        if self.graphs.should_update() && self.embassy.is_running() {
+        if self.graphs.should_update() && self.embassy.is_connected() {
             self.graphs
                 .update(self.status.get_surveyor_status_response());
         }

@@ -112,7 +112,7 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
             );
             if ui
                 .add_enabled(
-                    !app.embassy.is_running(),
+                    !app.embassy.is_connected(),
                     Button::new(
                         RichText::new("Connect")
                             .color(Color32::LIGHT_BLUE)
@@ -126,7 +126,7 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
             }
             if ui
                 .add_enabled(
-                    app.embassy.is_running(),
+                    app.embassy.is_connected(),
                     Button::new(
                         RichText::new("Disconnect")
                             .color(Color32::LIGHT_RED)

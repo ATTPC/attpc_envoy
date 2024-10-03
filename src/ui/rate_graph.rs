@@ -17,7 +17,7 @@ impl RateGraph {
     /// Note: time increment is hard coded to match the surveyor, should probably fix that.
     pub fn new(name: &str, max_points: &usize) -> Self {
         Self {
-            points: VecDeque::new(),
+            points: VecDeque::with_capacity(*max_points),
             max_points: *max_points,
             name: String::from(name),
         }

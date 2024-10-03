@@ -30,7 +30,7 @@ pub fn transition_ecc(
     if ids.is_empty() {
         return;
     }
-    if !embassy.is_running() {
+    if !embassy.is_connected() {
         tracing::error!("Some how trying to operate on ECC whilst disconnected!");
         return;
     }
