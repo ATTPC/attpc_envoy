@@ -105,7 +105,6 @@ fn main() {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("AT-TPC Envoy")
             .with_inner_size(eframe::epaint::vec2(1400.0, 1225.0)),
-        follow_system_theme: false,
         ..Default::default()
     };
     match eframe::run_native(
