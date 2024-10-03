@@ -12,7 +12,6 @@ pub fn render_graph_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
                 .color(Color32::LIGHT_BLUE)
                 .size(18.0),
         );
-        ui.separator();
         ui.horizontal(|ui| {
             ui.label(RichText::new("Number of Points Per Graph").size(16.0));
             ui.add(eframe::egui::DragValue::new(&mut max_points).speed(1));
