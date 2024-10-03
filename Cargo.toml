@@ -10,9 +10,9 @@ eframe = "0.28.1"
 egui_extras = "0.28.1"
 egui_plot = "0.28.1"
 human_bytes = "0.4.3"
-native-dialog = { version = "0.7.0", features = ["windows_dpi_awareness"] }
 quick-xml = { version = "0.36.1", features = ["serialize"] }
 reqwest = "0.12.7"
+rfd = "0.15.0"
 serde = "1.0.210"
 serde_yaml = "0.9.34"
 tokio = { version = "1.40.0", features = ["sync", "rt-multi-thread", "macros"] }
