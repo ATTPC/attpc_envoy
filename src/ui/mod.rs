@@ -7,7 +7,5 @@ mod ecc_panel;
 mod error;
 mod graph_manager;
 mod graph_panel;
-mod rate_graph;
 mod router_panel;
-mod status_colors;
-mod time_format;
+mod style;

@@ -23,7 +23,7 @@ pub struct Embassy {
 }
 
 impl Embassy {
-    /// Create an Embassy with some communication channels
+    /// Create an Embassy with a tokio Runtime
     pub fn new(rt: Runtime) -> Self {
         Embassy {
             ecc_senders: HashMap::new(),
@@ -35,6 +35,7 @@ impl Embassy {
         }
     }
 
+    /// Start the embassy service, connecting it to the various envoys
     pub fn startup(&mut self, experiment: &str) {
         let (envoy_tx, embassy_rx) = mpsc::channel::<EmbassyMessage>(33);
         let (cancel_tx, _) = broadcast::channel::<EmbassyMessage>(10);
@@ -92,10 +93,12 @@ impl Embassy {
         Ok(messages)
     }
 
+    /// Is the embassy connected to the envoys
     pub fn is_connected(&self) -> bool {
         self.is_connected
     }
 
+    /// How many tasks have been spawned
     pub fn number_of_tasks(&self) -> usize {
         if let Some(handles) = &self.handles {
             handles.len()
@@ -104,18 +107,3 @@ impl Embassy {
         }
     }
 }
-
-// This is the function to create and connect an Embassy as well as all of the envoys given a tokio runtime and experiment name.
-// pub fn connect_embassy(runtime: &mut Runtime, experiment: &str) -> (Embassy, Vec<JoinHandle<()>>) {
-//     let (envoy_tx, embassy_rx) = mpsc::channel::<EmbassyMessage>(33);
-//     let (cancel_tx, _) = broadcast::channel::<EmbassyMessage>(10);
-
-//     let (mut handles, ecc_switchboard) =
-//         startup_ecc_envoys(runtime, experiment, &envoy_tx, &cancel_tx);
-//     let mut sur_handles = startup_surveyor_envoys(runtime, &envoy_tx, &cancel_tx);
-
-//     let embassy = Embassy::new(embassy_rx, ecc_switchboard, cancel_tx);
-
-//     handles.append(&mut sur_handles);
-//     (embassy, handles)
-// }

@@ -1,5 +1,5 @@
 use super::app::EnvoyApp;
-use super::time_format::pretty_ellapsed_time;
+use super::style::pretty_ellapsed_time;
 use eframe::egui::{Button, Color32, DragValue, RichText, TopBottomPanel};
 use rfd::FileDialog;
 use std::time::{Duration, Instant};
