@@ -10,7 +10,7 @@ use crate::envoy::status_manager::StatusManager;
 use crate::envoy::transition::*;
 
 use eframe::egui::Color32;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 const DEFAULT_TEXT_COLOR: Color32 = Color32::LIGHT_GRAY;
 
@@ -22,9 +22,7 @@ pub struct EnvoyApp {
     pub embassy: Embassy,
     pub status: StatusManager,
     pub graphs: GraphManager,
-    pub max_graph_points: usize,
     pub run_start_time: Instant,
-    pub run_duration: Duration,
 }
 
 //*************//
@@ -41,9 +39,7 @@ impl EnvoyApp {
             embassy: Embassy::new(runtime),
             status: StatusManager::new(),
             graphs: GraphManager::new(10, 2),
-            max_graph_points: 10,
             run_start_time: Instant::now(),
-            run_duration: Duration::from_secs(0),
         }
     }
 

@@ -1,9 +1,12 @@
 use super::app::EnvoyApp;
 use super::time_format::pretty_ellapsed_time;
 use eframe::egui::{Button, Color32, DragValue, RichText, TopBottomPanel};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-///Render the configuration panel (top panel in the UI)
+/// Render the configuration panel (top panel in the UI)
+/// This panel is the one that implements a large part of the UI that
+/// directly interacts with the app itself, including the configuration
+/// and run controls. The only other panel that has this level of control is the ecc_panel.
 pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
     TopBottomPanel::top("Config_Panel").show(ctx, |ui| {
         //Drop down menu
@@ -91,26 +94,26 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
                 ui.add(DragValue::new(&mut app.config.v_thgem).speed(10));
                 ui.label(RichText::new("E-Drift(V)").size(16.0));
                 ui.add(DragValue::new(&mut app.config.e_drift).speed(10));
-                ui.label(RichText::new("Gas").size(16.0));
-                ui.text_edit_singleline(&mut app.config.gas);
-                ui.label(RichText::new("Magnetic Field(T)").size(16.0));
-                ui.add(DragValue::new(&mut app.config.magnetic_field).speed(0.01));
-                ui.end_row();
-
                 ui.label(RichText::new("VCathode(kV)").size(16.0));
                 ui.add(DragValue::new(&mut app.config.v_cathode).speed(10));
                 ui.label(RichText::new("E-Trans(V)").size(16.0));
                 ui.add(DragValue::new(&mut app.config.e_trans).speed(10));
-                ui.label(RichText::new("Beam").size(16.0));
-                ui.text_edit_singleline(&mut app.config.beam);
-                ui.end_row();
-
                 ui.label(RichText::new("VMM(V)").size(16.0));
                 ui.add(DragValue::new(&mut app.config.v_mm).speed(10));
+                ui.label(RichText::new("Magnetic Field(T)").size(16.0));
+                ui.add(DragValue::new(&mut app.config.magnetic_field).speed(0.01));
+                ui.end_row();
+
+                ui.label(RichText::new("Target Gas").size(16.0));
+                ui.text_edit_singleline(&mut app.config.gas);
                 ui.label(RichText::new("Pressure(Torr)").size(16.0));
                 ui.add(DragValue::new(&mut app.config.pressure).speed(10));
+                ui.label(RichText::new("Beam").size(16.0));
+                ui.text_edit_singleline(&mut app.config.beam);
                 ui.label(RichText::new("Beam Energy (MeV/U)").size(16.0));
                 ui.add(DragValue::new(&mut app.config.energy).speed(1));
+                ui.label(RichText::new("GET Freq. (MHz)").size(16.0));
+                ui.add(DragValue::new(&mut app.config.frequency).speed(1));
                 ui.end_row();
             });
 
@@ -184,13 +187,14 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
                 app.stop_run();
             }
 
+            let mut run_duration = Duration::from_secs(0);
             if app.status.is_system_running() {
-                app.run_duration = Instant::now() - app.run_start_time;
+                run_duration = Instant::now() - app.run_start_time;
             }
             ui.label(
                 RichText::new(format!(
                     "Duration(hrs:mins:ss): {}",
-                    pretty_ellapsed_time(app.run_duration.as_secs())
+                    pretty_ellapsed_time(run_duration.as_secs())
                 ))
                 .size(16.0)
                 .color(Color32::LIGHT_BLUE),

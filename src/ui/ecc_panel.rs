@@ -5,6 +5,8 @@ use crate::envoy::transition::{backward_transition_all, forward_transition_all, 
 use eframe::egui::{Button, Color32, RichText, SidePanel};
 
 /// Render the ECC envoy control panel, the left side panel in the ui
+/// The ECC panel is one of the two panels that allow users to directly
+/// interact with the app itself (the other being the config panel)
 pub fn render_ecc_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
     SidePanel::left("ECC_Panel").show(ctx, |ui| {
         ui.label(

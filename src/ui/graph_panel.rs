@@ -4,6 +4,7 @@ use eframe::egui::{Color32, RichText, TopBottomPanel};
 ///Render the graph panel, the bottom of the UI
 pub fn render_graph_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
     TopBottomPanel::bottom("Graph_Panel").show(ctx, |ui| {
+        let mut max_points = app.graphs.get_max_points().clone();
         ui.separator();
         let lines = app.graphs.get_line_graphs();
         ui.label(
@@ -14,11 +15,11 @@ pub fn render_graph_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
         ui.separator();
         ui.horizontal(|ui| {
             ui.label(RichText::new("Number of Points Per Graph").size(16.0));
-            ui.add(eframe::egui::DragValue::new(&mut app.max_graph_points).speed(1));
+            ui.add(eframe::egui::DragValue::new(&mut max_points).speed(1));
         });
         ui.separator();
-        if *app.graphs.get_max_points() != app.max_graph_points {
-            app.graphs.set_max_points(&app.max_graph_points)
+        if *app.graphs.get_max_points() != max_points {
+            app.graphs.set_max_points(&max_points)
         }
         egui_plot::Plot::new("RatePlot")
             .view_aspect(6.0)
