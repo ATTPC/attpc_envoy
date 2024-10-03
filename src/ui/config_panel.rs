@@ -1,6 +1,7 @@
 use super::app::EnvoyApp;
 use super::time_format::pretty_ellapsed_time;
 use eframe::egui::{Button, Color32, DragValue, RichText, TopBottomPanel};
+use rfd::FileDialog;
 use std::time::{Duration, Instant};
 
 /// Render the configuration panel (top panel in the UI)
@@ -12,12 +13,12 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
         //Drop down menu
         ui.menu_button(RichText::new("File").size(16.0), |ui| {
             if ui.button(RichText::new("Save").size(14.0)).clicked() {
-                if let Ok(Some(path)) = native_dialog::FileDialog::new()
-                    .set_location(
+                if let Some(path) = FileDialog::new()
+                    .set_directory(
                         &std::env::current_dir().expect("Couldn't access runtime directory"),
                     )
-                    .add_filter("YAML file", &["yaml"])
-                    .show_save_single_file()
+                    .add_filter("YAML", &["yaml", "yml"])
+                    .save_file()
                 {
                     app.config.path = path;
                     match app.config.save() {
@@ -28,12 +29,12 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
                 ui.close_menu();
             }
             if ui.button(RichText::new("Open").size(14.0)).clicked() {
-                if let Ok(Some(path)) = native_dialog::FileDialog::new()
-                    .set_location(
+                if let Some(path) = FileDialog::new()
+                    .set_directory(
                         &std::env::current_dir().expect("Couldn't access runtime directory"),
                     )
-                    .add_filter("YAML file", &["yaml"])
-                    .show_open_single_file()
+                    .add_filter("YAML", &["yaml", "yml"])
+                    .pick_file()
                 {
                     match app.config.load(path) {
                         Ok(()) => (),
@@ -46,40 +47,23 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
 
         // Configuration
         ui.separator();
-
         ui.label(
             RichText::new("Configuration")
                 .color(Color32::LIGHT_BLUE)
                 .size(18.0),
         );
-        ui.label(
-            RichText::new(format!("Config File: {}", app.config.path.display()))
-                .size(16.0)
-                .color(Color32::LIGHT_BLUE),
-        );
         ui.horizontal(|ui| {
             ui.label(
-                RichText::new("Experiment")
-                    .size(16.0)
-                    .color(Color32::LIGHT_BLUE),
+                RichText::new(format!("Config File: {}", app.config.path.display())).size(16.0),
             );
+            ui.label(RichText::new("Experiment").size(16.0));
             ui.add(
                 eframe::egui::widgets::TextEdit::singleline(&mut app.config.experiment)
                     .desired_width(100.0)
                     .margin(eframe::egui::Margin::symmetric(4.0, 4.0)),
             );
-        });
-
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new("Run Number")
-                    .size(16.0)
-                    .color(Color32::LIGHT_BLUE),
-            );
+            ui.label(RichText::new("Run Number").size(16.0));
             ui.add(DragValue::new(&mut app.config.run_number).speed(1));
-        });
-
-        ui.horizontal(|ui| {
             ui.label(RichText::new("Description").size(16.0));
             ui.add(
                 eframe::egui::widgets::TextEdit::singleline(&mut app.config.description)
@@ -154,12 +138,7 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
             {
                 app.disconnect();
             }
-        });
-
-        // Start/Stop buttons
-        ui.separator();
-
-        ui.horizontal(|ui| {
+            //Start/Stop
             ui.label(
                 RichText::new("Run Control")
                     .size(16.0)
