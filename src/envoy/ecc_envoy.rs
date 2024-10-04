@@ -153,6 +153,104 @@ impl ECCConfig {
     }
 }
 
+pub async fn run_ecc_status_envoy(
+    config: ECCConfig,
+    outgoing: mpsc::Sender<EmbassyMessage>,
+    mut cancel: broadcast::Receiver<EmbassyMessage>,
+) -> Result<(), EnvoyError> {
+    let connection_out = Duration::from_secs(120);
+    let req_timeout = Duration::from_secs(120);
+
+    //Probably need some options here, for now just set some timeouts
+    let client = Client::builder()
+        .connect_timeout(connection_out)
+        .timeout(req_timeout)
+        .build()?;
+    loop {
+        tokio::select! {
+            _ = cancel.recv() => {
+                return Ok(());
+            }
+
+            _ = tokio::time::sleep(Duration::from_secs(2)) => {
+                if let Ok(response) = submit_check_status(&config, &client).await {
+                    outgoing.send(response).await?
+                } else {
+                    let response = ECCStatusResponse { error_code: 0, error_message: String::from(""), state: 0, transition: 0 };
+                    let message = EmbassyMessage::compose_ecc_status(serde_yaml::to_string(&response)?, config.id);
+                    outgoing.send(message).await?
+                }
+            }
+        }
+    }
+}
+
+async fn submit_check_status(
+    config: &ECCConfig,
+    cxn: &Client,
+) -> Result<EmbassyMessage, EnvoyError> {
+    let message = format!("{ECC_SOAP_HEADER}<GetState>\n</GetState>\n{ECC_SOAP_FOOTER}");
+    let response = cxn
+        .post(&config.url)
+        .header("ContentType", "text/xml")
+        .body(message)
+        .send()
+        .await?;
+    let parsed_response = parse_status_response(config, response).await?;
+    Ok(parsed_response)
+}
+
+async fn parse_status_response(
+    config: &ECCConfig,
+    response: Response,
+) -> Result<EmbassyMessage, EnvoyError> {
+    let text = response.text().await?;
+    let mut reader = quick_xml::Reader::from_str(&text);
+    let mut parsed: ECCStatusResponse = ECCStatusResponse::default();
+
+    reader.read_event()?; //Opening
+    reader.read_event()?; //Junk
+    reader.read_event()?; //SOAP Decl
+    reader.read_event()?; //SOAP Body
+    reader.read_event()?; //ECC
+    reader.read_event()?; //ErrorCode start tag
+    let event = reader.read_event()?; //ErrorCode payload
+    parsed.error_code = match event {
+        quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
+        _ => return Err(EnvoyError::FailedXMLConvert),
+    };
+    reader.read_event()?; //ErrorCode end tag
+    reader.read_event()?; //ErrorMesage start tag
+    let event = reader.read_event()?; //ErrorMessage payload or end tag
+    let mut is_msg = true;
+    parsed.error_message = match event {
+        quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?,
+        _ => {
+            is_msg = false;
+            String::from("")
+        }
+    };
+    if is_msg {
+        reader.read_event()?; //ErrorMessage end tag
+    }
+    reader.read_event()?; //State start tag
+    let event = reader.read_event()?; //State payload
+    parsed.state = match event {
+        quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
+        _ => return Err(EnvoyError::FailedXMLConvert),
+    };
+    reader.read_event()?; //State end tag
+    reader.read_event()?; //Transition start tag
+    let event = reader.read_event()?; //Transition payload
+    parsed.transition = match event {
+        quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
+        _ => return Err(EnvoyError::FailedXMLConvert),
+    };
+
+    let status_response =
+        EmbassyMessage::compose_ecc_status(serde_yaml::to_string(&parsed)?, config.id);
+    Ok(status_response)
+}
 /// The structure encompassing an async task associated with the ECC Server system.
 /// ECCEnvoys have two modes, status check and transition. Transition envoys tell the server
 /// when to load/unload configuration data. Status check envoys simply check the status
