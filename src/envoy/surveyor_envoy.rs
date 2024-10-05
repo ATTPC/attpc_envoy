@@ -10,6 +10,10 @@ use tokio::task::JoinHandle;
 
 const SURVEYOR_URL_PORT: i32 = 8081;
 
+const STATUS_WAIT_TIME_SEC: u64 = 2;
+
+const CONNECTION_TIMEOUT_SEC: u64 = 120;
+
 /// The message delivered from the SurveyorEnvoy (the status of a DataRouter and its machine)
 /// Contains a lot of data from a lot of different pieces of the
 /// filesystem on which the specific data router is running
@@ -67,131 +71,100 @@ impl SurveyorConfig {
     }
 }
 
-/// The structure encompassing an async task associated with the Surveyor/Data Router system.
-/// The DataRouter is part of the GET DAQ system which takes data from the CoBo/MuTaNT and routes
-/// it to storage/external use. The Surveyor is an extension used by the AT-TPC system which monitors
-/// the status of the DataRouter and the machine on which it is writing data. The Surveyor writes the
-/// status out to an html file which is served and accessed by this envoy.
-/// As such, at the moment, SurveyorEnvoys can only check the status of the DataRouter as no commands can
-/// be sent to them. But maybe in the future this will change.
-#[derive(Debug)]
-pub struct SurveyorEnvoy {
+async fn run_surveyor_envoy(
     config: SurveyorConfig,
-    connection: Client,
     outgoing: mpsc::Sender<EmbassyMessage>,
-    cancel: broadcast::Receiver<EmbassyMessage>,
-    last_bytes: u64,
+    mut cancel: broadcast::Receiver<EmbassyMessage>,
+) -> Result<(), EnvoyError> {
+    let mut previous_bytes: u64 = 0;
+    let connection_out = Duration::from_secs(CONNECTION_TIMEOUT_SEC);
+    let req_timeout = Duration::from_secs(CONNECTION_TIMEOUT_SEC);
+
+    //Probably need some options here, for now just set some timeouts
+    let client = Client::builder()
+        .connect_timeout(connection_out)
+        .timeout(req_timeout)
+        .build()?;
+    loop {
+        tokio::select! {
+            _ = cancel.recv() => {
+                return Ok(());
+            }
+
+            _ = tokio::time::sleep(Duration::from_secs(STATUS_WAIT_TIME_SEC)) => {
+                if let Ok(Some(response)) = submit_check_status(&config, &client, &mut previous_bytes).await {
+                        outgoing.send(response).await?;
+                } else {
+                    let message = EmbassyMessage::compose_surveyor_response(serde_yaml::to_string(&SurveyorResponse::default())?, config.id);
+                    outgoing.send(message).await?
+                }
+            }
+        }
+    }
 }
 
-impl SurveyorEnvoy {
-    /// Create a new surveyor envoy with some communication channels
-    pub fn new(
-        config: SurveyorConfig,
-        tx: mpsc::Sender<EmbassyMessage>,
-        cancel: broadcast::Receiver<EmbassyMessage>,
-    ) -> Result<Self, EnvoyError> {
-        //10s default timeouts
-        let connection_out = Duration::from_secs(10);
-        let req_timeout = Duration::from_secs(10);
+async fn submit_check_status(
+    config: &SurveyorConfig,
+    cxn: &Client,
+    previous_bytes: &mut u64,
+) -> Result<Option<EmbassyMessage>, EnvoyError> {
+    let response = cxn.get(&config.url).send().await?;
+    parse_response(config, response, previous_bytes).await
+}
 
-        //Probably need some options here, for now just set some timeouts
-        let client = Client::builder()
-            .connect_timeout(connection_out)
-            .timeout(req_timeout)
-            .build()?;
-        Ok(Self {
-            config,
-            connection: client,
-            outgoing: tx,
-            cancel,
-            last_bytes: 0,
-        })
+async fn parse_response(
+    config: &SurveyorConfig,
+    response: Response,
+    previous_bytes: &mut u64,
+) -> Result<Option<EmbassyMessage>, EnvoyError> {
+    let response_text = response.text().await?;
+    let mut status = SurveyorResponse::default();
+    let lines: Vec<&str> = response_text.lines().collect();
+
+    if lines.is_empty() {
+        return Ok(None);
     }
 
-    /// This is the core task loop for a SurveyorEnvoy. Every two seconds check the
-    /// status of the Surveyor. Uses tokio::select! to handle cancelling.
-    pub async fn wait_check_status(&mut self) -> Result<(), EnvoyError> {
-        loop {
-            tokio::select! {
-                _ = self.cancel.recv() => {
-                    return Ok(());
-                }
-
-                _ = tokio::time::sleep(Duration::from_secs(2)) => {
-                    if let Ok(response) = self.submit_check_status().await {
-                        if let Some(resp) = response {
-                            self.outgoing.send(resp).await?;
-                        }
-                    } else {
-                        let message = EmbassyMessage::compose_surveyor_response(serde_yaml::to_string(&SurveyorResponse::default())?, self.config.id);
-                        self.outgoing.send(message).await?
-                    }
-                }
-            }
-        }
-    }
-
-    /// Submit a status request to the envoy and parse the response
-    async fn submit_check_status(&mut self) -> Result<Option<EmbassyMessage>, EnvoyError> {
-        let response = self.connection.get(&self.config.url).send().await?;
-        let parsed_response = self.parse_response(response).await?;
-        Ok(parsed_response)
-    }
-
-    /// Parses the html response from the Surveyor
-    async fn parse_response(
-        &mut self,
-        response: Response,
-    ) -> Result<Option<EmbassyMessage>, EnvoyError> {
-        let response_text = response.text().await?;
-        let mut status = SurveyorResponse::default();
-        let lines: Vec<&str> = response_text.lines().collect();
-
-        if lines.is_empty() {
-            return Ok(None);
-        }
-
-        status.state = lines[0].parse::<i32>()?;
-        if status.state == 0 {
-            return Ok(Some(EmbassyMessage::compose_surveyor_response(
-                serde_yaml::to_string(&status)?,
-                self.config.id,
-            )));
-        }
-        status.address = self.config.address.clone();
-        status.location = String::from(lines[1]);
-        let line_entries: Vec<&str> = lines[3].split_whitespace().collect();
-        status.percent_used = String::from(line_entries[4]);
-        status.disk_space = line_entries[1].parse::<u64>()? * 512;
-
-        let mut bytes: u64 = 0;
-        let mut n_files = 0;
-        for line in lines[4..].iter() {
-            if line.contains("graw") {
-                let line_entries: Vec<&str> = line.split_whitespace().collect();
-                bytes += line_entries[4].parse::<u64>()?;
-                n_files += 1;
-            }
-        }
-
-        if n_files > 0 {
-            status.disk_status = String::from("Filled");
-        } else {
-            status.disk_status = String::from("Empty");
-        }
-
-        status.files = n_files;
-        status.bytes_used = bytes;
-
-        status.data_rate = ((bytes - self.last_bytes) as f64) * 1.0e-6 / 2.0; //MB/s
-
-        self.last_bytes = bytes;
-
-        Ok(Some(EmbassyMessage::compose_surveyor_response(
+    status.state = lines[0].parse::<i32>()?;
+    if status.state == 0 {
+        return Ok(Some(EmbassyMessage::compose_surveyor_response(
             serde_yaml::to_string(&status)?,
-            self.config.id,
-        )))
+            config.id,
+        )));
     }
+    status.address = config.address.clone();
+    status.location = String::from(lines[1]);
+    let line_entries: Vec<&str> = lines[3].split_whitespace().collect();
+    status.percent_used = String::from(line_entries[4]);
+    status.disk_space = line_entries[1].parse::<u64>()? * 512;
+
+    let mut bytes: u64 = 0;
+    let mut n_files = 0;
+    for line in lines[4..].iter() {
+        if line.contains("graw") {
+            let line_entries: Vec<&str> = line.split_whitespace().collect();
+            bytes += line_entries[4].parse::<u64>()?;
+            n_files += 1;
+        }
+    }
+
+    if n_files > 0 {
+        status.disk_status = String::from("Filled");
+    } else {
+        status.disk_status = String::from("Empty");
+    }
+
+    status.files = n_files;
+    status.bytes_used = bytes;
+
+    status.data_rate = ((bytes - *previous_bytes) as f64) * 1.0e-6 / (STATUS_WAIT_TIME_SEC as f64); //MB/s
+
+    *previous_bytes = bytes;
+
+    Ok(Some(EmbassyMessage::compose_surveyor_response(
+        serde_yaml::to_string(&status)?,
+        config.id,
+    )))
 }
 
 /// Function to create all of the SurveyorEnvoys and spawn their tasks. Returns handles to the tasks.
@@ -208,12 +181,9 @@ pub fn startup_surveyor_envoys(
         let this_surveyor_tx = surveyor_tx.clone();
         let this_cancel = cancel.subscribe();
         let handle = runtime.spawn(async move {
-            match SurveyorEnvoy::new(config, this_surveyor_tx, this_cancel) {
-                Ok(mut ev) => match ev.wait_check_status().await {
-                    Ok(()) => (),
-                    Err(e) => tracing::error!("Surveyor status envoy ran into an error: {}", e),
-                },
-                Err(e) => tracing::error!("Error creating Surveyor status envoy: {}", e),
+            match run_surveyor_envoy(config, this_surveyor_tx, this_cancel).await {
+                Ok(()) => (),
+                Err(e) => tracing::error!("SurveyorEnvoy had an error: {}", e),
             }
         });
 
