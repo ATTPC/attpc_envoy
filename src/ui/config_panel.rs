@@ -15,7 +15,7 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
             if ui.button(RichText::new("Save").size(14.0)).clicked() {
                 if let Some(path) = FileDialog::new()
                     .set_directory(
-                        &std::env::current_dir().expect("Couldn't access runtime directory"),
+                        std::env::current_dir().expect("Couldn't access runtime directory"),
                     )
                     .add_filter("YAML", &["yaml", "yml"])
                     .save_file()
@@ -31,7 +31,7 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
             if ui.button(RichText::new("Open").size(14.0)).clicked() {
                 if let Some(path) = FileDialog::new()
                     .set_directory(
-                        &std::env::current_dir().expect("Couldn't access runtime directory"),
+                        std::env::current_dir().expect("Couldn't access runtime directory"),
                     )
                     .add_filter("YAML", &["yaml", "yml"])
                     .pick_file()

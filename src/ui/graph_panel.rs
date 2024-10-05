@@ -4,7 +4,7 @@ use eframe::egui::{Color32, RichText, TopBottomPanel};
 ///Render the graph panel, the bottom of the UI
 pub fn render_graph_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
     TopBottomPanel::bottom("Graph_Panel").show(ctx, |ui| {
-        let mut max_points = app.graphs.get_max_points().clone();
+        let mut max_points: usize = *app.graphs.get_max_points();
         ui.separator();
         let lines = app.graphs.get_line_graphs();
         ui.label(
