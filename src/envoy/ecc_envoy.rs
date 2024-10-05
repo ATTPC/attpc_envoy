@@ -13,6 +13,12 @@ use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+/// Amount of time to wait to check status
+const STATUS_WAIT_TIME_SEC: u64 = 2;
+
+/// Connection timeout
+const CONNECTION_TIMEOUT_SEC: u64 = 120;
+
 /// The default port for ECC
 const ECC_URL_PORT: i32 = 8083;
 
@@ -153,26 +159,41 @@ impl ECCConfig {
     }
 }
 
-pub async fn run_ecc_status_envoy(
+/// Run an ECC envoy, communicating with the ECCServer
+async fn run_ecc_envoy(
     config: ECCConfig,
+    mut incoming: mpsc::Receiver<EmbassyMessage>,
     outgoing: mpsc::Sender<EmbassyMessage>,
     mut cancel: broadcast::Receiver<EmbassyMessage>,
 ) -> Result<(), EnvoyError> {
-    let connection_out = Duration::from_secs(120);
-    let req_timeout = Duration::from_secs(120);
+    let connection_out = Duration::from_secs(CONNECTION_TIMEOUT_SEC);
+    let req_timeout = Duration::from_secs(CONNECTION_TIMEOUT_SEC);
 
     //Probably need some options here, for now just set some timeouts
     let client = Client::builder()
         .connect_timeout(connection_out)
         .timeout(req_timeout)
         .build()?;
+    // This is the core loop of the envoy. Wait for one of three conditions.
+    // 1. A cancel message. This stops the envoy and ends the task
+    // 2. A operation (ECCOperation) has been requested. Submit the request to the module
+    // 3. 2 seconds pass. Every 2 sec query the status of the server.
     loop {
         tokio::select! {
             _ = cancel.recv() => {
-                return Ok(());
+                return Ok(())
             }
 
-            _ = tokio::time::sleep(Duration::from_secs(2)) => {
+            data = incoming.recv() => {
+                if let Some(message) = data {
+                    let response = submit_operation(&config, &client, message).await?;
+                    outgoing.send(response).await?;
+                } else {
+                    return Ok(())
+                }
+            }
+
+            _ = tokio::time::sleep(Duration::from_secs(STATUS_WAIT_TIME_SEC)) => {
                 if let Ok(response) = submit_check_status(&config, &client).await {
                     outgoing.send(response).await?
                 } else {
@@ -185,6 +206,24 @@ pub async fn run_ecc_status_envoy(
     }
 }
 
+/// Submit a operation (ECCOperation)
+async fn submit_operation(
+    config: &ECCConfig,
+    cxn: &Client,
+    message: EmbassyMessage,
+) -> Result<EmbassyMessage, EnvoyError> {
+    let ecc_message = compose_operation_request(config, message)?;
+    let response = cxn
+        .post(&config.url)
+        .header("ContentType", "text/xml")
+        .body(ecc_message)
+        .send()
+        .await?;
+    let parsed_response = parse_operation_response(config, response).await?;
+    Ok(parsed_response)
+}
+
+/// Sumbit a status check
 async fn submit_check_status(
     config: &ECCConfig,
     cxn: &Client,
@@ -200,6 +239,67 @@ async fn submit_check_status(
     Ok(parsed_response)
 }
 
+/// Compose the operation request (text)
+fn compose_operation_request(
+    config: &ECCConfig,
+    message: EmbassyMessage,
+) -> Result<String, EnvoyError> {
+    let op = ECCOperation::try_from(message.operation)?;
+    let body = config.compose_config_body();
+    let link = config.compose_data_link_body();
+    Ok(format!(
+        "{ECC_SOAP_HEADER}<{op}>\n{body}{link}</{op}>\n{ECC_SOAP_FOOTER}"
+    ))
+}
+
+/// Parse the response from the server after an operation
+async fn parse_operation_response(
+    config: &ECCConfig,
+    response: Response,
+) -> Result<EmbassyMessage, EnvoyError> {
+    let text = response.text().await?;
+    let mut reader = quick_xml::Reader::from_str(&text);
+    let mut parsed = ECCOperationResponse::default();
+
+    reader.read_event()?; //Opening
+    reader.read_event()?; //Junk
+    reader.read_event()?; //SOAP Decl
+    reader.read_event()?; //SOAP Body
+    reader.read_event()?; //ECC
+    reader.read_event()?; //ErrorCode start tag
+    let event = reader.read_event()?; //ErrorCode payload
+    parsed.error_code = match event {
+        quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
+        _ => return Err(EnvoyError::FailedXMLConvert),
+    };
+    reader.read_event()?; //ErrorCode end tag
+    reader.read_event()?; //ErrorMesage start tag
+    let event = reader.read_event()?; //ErrorMessage payload or end tag
+    let mut is_msg = true;
+    parsed.error_message = match event {
+        quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?,
+        _ => {
+            is_msg = false;
+            String::from("")
+        }
+    };
+    if is_msg {
+        reader.read_event()?; //ErrorMessage end tag
+    }
+    reader.read_event()?; //Text start tag
+    let event = reader.read_event()?; //Text payload
+    parsed.text = match event {
+        quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?,
+        _ => String::from(""),
+    };
+
+    Ok(EmbassyMessage::compose_ecc_response(
+        serde_yaml::to_string(&parsed)?,
+        config.id,
+    ))
+}
+
+/// Parse the server status response
 async fn parse_status_response(
     config: &ECCConfig,
     response: Response,
@@ -251,241 +351,10 @@ async fn parse_status_response(
         EmbassyMessage::compose_ecc_status(serde_yaml::to_string(&parsed)?, config.id);
     Ok(status_response)
 }
-/// The structure encompassing an async task associated with the ECC Server system.
-/// ECCEnvoys have two modes, status check and transition. Transition envoys tell the server
-/// when to load/unload configuration data. Status check envoys simply check the status
-/// of the server every few seconds. In principle these tasks could be combined using a timer,
-/// however, I think that separate tasks are prefered to keep the system as reactive as possible
-#[derive(Debug)]
-pub struct ECCEnvoy {
-    config: ECCConfig,
-    connection: Client,
-    incoming: mpsc::Receiver<EmbassyMessage>,
-    outgoing: mpsc::Sender<EmbassyMessage>,
-    cancel: broadcast::Receiver<EmbassyMessage>,
-}
-
-impl ECCEnvoy {
-    pub fn new(
-        config: ECCConfig,
-        rx: mpsc::Receiver<EmbassyMessage>,
-        tx: mpsc::Sender<EmbassyMessage>,
-        cancel: broadcast::Receiver<EmbassyMessage>,
-    ) -> Result<Self, EnvoyError> {
-        //120s (2min) default timeouts to match ECCServer/Client
-        let connection_out = Duration::from_secs(120);
-        let req_timeout = Duration::from_secs(120);
-
-        //Probably need some options here, for now just set some timeouts
-        let client = Client::builder()
-            .connect_timeout(connection_out)
-            .timeout(req_timeout)
-            .build()?;
-        Ok(Self {
-            config,
-            connection: client,
-            incoming: rx,
-            outgoing: tx,
-            cancel,
-        })
-    }
-
-    /// This one of the core task loops for an ECCEnvoy. Waits for a
-    /// message from the embassy to transition the configuration of
-    /// an ECC Server. Uses tokio::select! to handle cancelling
-    pub async fn wait_for_transition(&mut self) -> Result<(), EnvoyError> {
-        loop {
-            tokio::select! {
-                _ = self.cancel.recv() => {
-                    return Ok(())
-                }
-
-                data = self.incoming.recv() => {
-                    if let Some(message) = data {
-                        let response = self.submit_transition(message).await?;
-                        self.outgoing.send(response).await?;
-                    } else {
-                        return Ok(())
-                    }
-                }
-            }
-        }
-    }
-
-    /// This one of the core task loops for an ECCEnvoy. Every two seconds check the
-    /// status of the ECC Server. Uses tokio::select! to handle cancelling.
-    pub async fn wait_check_status(&mut self) -> Result<(), EnvoyError> {
-        loop {
-            tokio::select! {
-                _ = self.cancel.recv() => {
-                    return Ok(());
-                }
-
-                _ = tokio::time::sleep(Duration::from_secs(2)) => {
-                    if let Ok(response) = self.submit_check_status().await {
-                        self.outgoing.send(response).await?
-                    } else {
-                        let response = ECCStatusResponse { error_code: 0, error_message: String::from(""), state: 0, transition: 0 };
-                        let message = EmbassyMessage::compose_ecc_status(serde_yaml::to_string(&response)?, self.config.id);
-                        self.outgoing.send(message).await?
-                    }
-                }
-            }
-        }
-    }
-
-    /// Submit a transition request to the associated getECCServer
-    /// and parse the response
-    async fn submit_transition(
-        &self,
-        message: EmbassyMessage,
-    ) -> Result<EmbassyMessage, EnvoyError> {
-        let ecc_message = self.compose_ecc_transition_request(message)?;
-        let response = self
-            .connection
-            .post(&self.config.url)
-            .header("ContentType", "text/xml")
-            .body(ecc_message)
-            .send()
-            .await?;
-        let parsed_response = self.parse_ecc_operation_response(response).await?;
-        Ok(parsed_response)
-    }
-
-    /// Submit a status check request to the associated getECCServer
-    /// and parse the response
-    async fn submit_check_status(&self) -> Result<EmbassyMessage, EnvoyError> {
-        let message = format!("{ECC_SOAP_HEADER}<GetState>\n</GetState>\n{ECC_SOAP_FOOTER}");
-        let response = self
-            .connection
-            .post(&self.config.url)
-            .header("ContentType", "text/xml")
-            .body(message)
-            .send()
-            .await?;
-        let parsed_response = self.parse_ecc_status_response(response).await?;
-        Ok(parsed_response)
-    }
-
-    /// Parse an ECC operation (transition) response and compose the
-    /// appropriate EmbassyMessage
-    async fn parse_ecc_operation_response(
-        &self,
-        response: Response,
-    ) -> Result<EmbassyMessage, EnvoyError> {
-        let text = response.text().await?;
-        let mut reader = quick_xml::Reader::from_str(&text);
-        let mut parsed = ECCOperationResponse::default();
-
-        reader.read_event()?; //Opening
-        reader.read_event()?; //Junk
-        reader.read_event()?; //SOAP Decl
-        reader.read_event()?; //SOAP Body
-        reader.read_event()?; //ECC
-        reader.read_event()?; //ErrorCode start tag
-        let event = reader.read_event()?; //ErrorCode payload
-        parsed.error_code = match event {
-            quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
-            _ => return Err(EnvoyError::FailedXMLConvert),
-        };
-        reader.read_event()?; //ErrorCode end tag
-        reader.read_event()?; //ErrorMesage start tag
-        let event = reader.read_event()?; //ErrorMessage payload or end tag
-        let mut is_msg = true;
-        parsed.error_message = match event {
-            quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?,
-            _ => {
-                is_msg = false;
-                String::from("")
-            }
-        };
-        if is_msg {
-            reader.read_event()?; //ErrorMessage end tag
-        }
-        reader.read_event()?; //Text start tag
-        let event = reader.read_event()?; //Text payload
-        parsed.text = match event {
-            quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?,
-            _ => String::from(""),
-        };
-
-        Ok(EmbassyMessage::compose_ecc_response(
-            serde_yaml::to_string(&parsed)?,
-            self.config.id,
-        ))
-    }
-
-    /// Parse an ECC status response and compose the appropriate
-    /// EmbassyMessage
-    async fn parse_ecc_status_response(
-        &self,
-        response: Response,
-    ) -> Result<EmbassyMessage, EnvoyError> {
-        let text = response.text().await?;
-        let mut reader = quick_xml::Reader::from_str(&text);
-        let mut parsed: ECCStatusResponse = ECCStatusResponse::default();
-
-        reader.read_event()?; //Opening
-        reader.read_event()?; //Junk
-        reader.read_event()?; //SOAP Decl
-        reader.read_event()?; //SOAP Body
-        reader.read_event()?; //ECC
-        reader.read_event()?; //ErrorCode start tag
-        let event = reader.read_event()?; //ErrorCode payload
-        parsed.error_code = match event {
-            quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
-            _ => return Err(EnvoyError::FailedXMLConvert),
-        };
-        reader.read_event()?; //ErrorCode end tag
-        reader.read_event()?; //ErrorMesage start tag
-        let event = reader.read_event()?; //ErrorMessage payload or end tag
-        let mut is_msg = true;
-        parsed.error_message = match event {
-            quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?,
-            _ => {
-                is_msg = false;
-                String::from("")
-            }
-        };
-        if is_msg {
-            reader.read_event()?; //ErrorMessage end tag
-        }
-        reader.read_event()?; //State start tag
-        let event = reader.read_event()?; //State payload
-        parsed.state = match event {
-            quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
-            _ => return Err(EnvoyError::FailedXMLConvert),
-        };
-        reader.read_event()?; //State end tag
-        reader.read_event()?; //Transition start tag
-        let event = reader.read_event()?; //Transition payload
-        parsed.transition = match event {
-            quick_xml::events::Event::Text(t) => String::from_utf8(t.to_vec())?.parse()?,
-            _ => return Err(EnvoyError::FailedXMLConvert),
-        };
-
-        let status_response =
-            EmbassyMessage::compose_ecc_status(serde_yaml::to_string(&parsed)?, self.config.id);
-        Ok(status_response)
-    }
-
-    /// Compose the xml string for the given transition request
-    fn compose_ecc_transition_request(
-        &self,
-        message: EmbassyMessage,
-    ) -> Result<String, EnvoyError> {
-        let op = ECCOperation::try_from(message.operation)?;
-        let config = self.config.compose_config_body();
-        let link = self.config.compose_data_link_body();
-        Ok(format!(
-            "{ECC_SOAP_HEADER}<{op}>\n{config}{link}</{op}>\n{ECC_SOAP_FOOTER}"
-        ))
-    }
-}
 
 /// Startup the ECC communication system
-/// Takes in a runtime reference, experiment name, and a channel to send data to the embassy. Spawns the ECCEnvoys with tasks to either wait for
-/// a command to transition that ECC DAQ or to periodically check the status of that particular ECC DAQ.
+/// Takes in a runtime reference, experiment name, and a channel to send data to the embassy. Spawns the ECCEnvoys with tasks to wait for
+/// a command to operation that ECC DAQ and to periodically check the status of that particular ECC DAQ.
 pub fn startup_ecc_envoys(
     runtime: &mut tokio::runtime::Runtime,
     experiment: &str,
@@ -495,49 +364,25 @@ pub fn startup_ecc_envoys(
     Vec<JoinHandle<()>>,
     HashMap<usize, mpsc::Sender<EmbassyMessage>>,
 ) {
-    let mut transition_switchboard = HashMap::new();
+    let mut switchboard = HashMap::new();
     let mut handles: Vec<JoinHandle<()>> = vec![];
 
-    //spin up the transition envoys
+    //spin up the envoys
     for id in 0..NUMBER_OF_MODULES {
         let config = ECCConfig::new(id, experiment);
         let (embassy_tx, ecc_rx) = mpsc::channel::<EmbassyMessage>(10);
         let this_ecc_tx = ecc_tx.clone();
         let this_cancel = cancel.subscribe();
         let handle = runtime.spawn(async move {
-            match ECCEnvoy::new(config, ecc_rx, this_ecc_tx, this_cancel) {
-                Ok(mut ev) => match ev.wait_for_transition().await {
-                    Ok(()) => (),
-                    Err(e) => tracing::error!("ECC transition envoy ran into an error: {}", e),
-                },
-                Err(e) => tracing::error!("Error creating ECC transition envoy: {}", e),
+            match run_ecc_envoy(config, ecc_rx, this_ecc_tx, this_cancel).await {
+                Ok(()) => (),
+                Err(e) => tracing::error!("Error in ECC envoy: {}", e),
             }
         });
 
-        transition_switchboard.insert(id, embassy_tx);
+        switchboard.insert(id, embassy_tx);
         handles.push(handle);
     }
 
-    //spin up the status envoys
-    for id in 0..NUMBER_OF_MODULES {
-        let config = ECCConfig::new(id, experiment);
-        //The incoming channel is unused in the status envoy, however this may be changed later.
-        //Could be useful to tie the update rate to the GUI?
-        let (_, ecc_rx) = mpsc::channel::<EmbassyMessage>(10);
-        let this_ecc_tx = ecc_tx.clone();
-        let this_cancel = cancel.subscribe();
-        let handle = runtime.spawn(async move {
-            match ECCEnvoy::new(config, ecc_rx, this_ecc_tx, this_cancel) {
-                Ok(mut ev) => match ev.wait_check_status().await {
-                    Ok(()) => (),
-                    Err(e) => tracing::error!("ECC status envoy ran into an error: {}", e),
-                },
-                Err(e) => tracing::error!("Error creating ECC status envoy: {}", e),
-            }
-        });
-
-        handles.push(handle);
-    }
-
-    (handles, transition_switchboard)
+    (handles, switchboard)
 }
