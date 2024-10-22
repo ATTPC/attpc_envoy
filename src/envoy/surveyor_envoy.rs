@@ -76,7 +76,7 @@ async fn run_surveyor_envoy(
     outgoing: mpsc::Sender<EmbassyMessage>,
     mut cancel: broadcast::Receiver<EmbassyMessage>,
 ) -> Result<(), EnvoyError> {
-    let mut previous_bytes: u64 = 0;
+    let mut previous_bytes: f64 = 0.0;
     let connection_out = Duration::from_secs(CONNECTION_TIMEOUT_SEC);
     let req_timeout = Duration::from_secs(CONNECTION_TIMEOUT_SEC);
 
@@ -106,7 +106,7 @@ async fn run_surveyor_envoy(
 async fn submit_check_status(
     config: &SurveyorConfig,
     cxn: &Client,
-    previous_bytes: &mut u64,
+    previous_bytes: &mut f64,
 ) -> Result<Option<EmbassyMessage>, EnvoyError> {
     let response = cxn.get(&config.url).send().await?;
     parse_response(config, response, previous_bytes).await
@@ -115,7 +115,7 @@ async fn submit_check_status(
 async fn parse_response(
     config: &SurveyorConfig,
     response: Response,
-    previous_bytes: &mut u64,
+    previous_bytes: &mut f64,
 ) -> Result<Option<EmbassyMessage>, EnvoyError> {
     let response_text = response.text().await?;
     let mut status = SurveyorResponse::default();
@@ -156,10 +156,11 @@ async fn parse_response(
 
     status.files = n_files;
     status.bytes_used = bytes;
+    let bytes_float = bytes as f64;
 
-    status.data_rate = ((bytes - *previous_bytes) as f64) * 1.0e-6 / (STATUS_WAIT_TIME_SEC as f64); //MB/s
+    status.data_rate = (bytes_float - *previous_bytes) * 1.0e-6 / (STATUS_WAIT_TIME_SEC as f64); //MB/s
 
-    *previous_bytes = bytes;
+    *previous_bytes = bytes_float;
 
     Ok(Some(EmbassyMessage::compose_surveyor_response(
         serde_yaml::to_string(&status)?,
