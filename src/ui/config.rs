@@ -1,14 +1,16 @@
+use super::error::ConfigError;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::fs::File;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
-const HEADER_STR: &str = "Run,Duration(s),Note,Gas,Beam,Energy(MeV/U),Pressure(Torr),B-Field(T),V_THGEM(V),V_MM(V),V_Cathode(kV),E-Drift(V),E-Trans(V)\n";
+const HEADER_STR: &str = "Run,Duration(s),Note,Gas,Beam,Energy(MeV/U),Pressure(Torr),B-Field(T),V_THGEM(V),V_MM(V),V_Cathode(kV),E-Drift(V),E-Trans(V),GET_Freq(MHz)\n";
 
 /// (De)Serializable application configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     #[serde(skip)]
-    pub config_path: PathBuf,
+    pub path: PathBuf,
 
     pub experiment: String,
     pub run_number: i32,
@@ -23,12 +25,13 @@ pub struct Config {
     pub beam: String,
     pub energy: f32,
     pub magnetic_field: f32,
+    pub frequency: f32,
 }
 
 impl Config {
     pub fn new() -> Self {
-        return Config {
-            config_path: PathBuf::from("example.yml"),
+        Config {
+            path: PathBuf::from("example.yml"),
             experiment: String::from("Exp"),
             run_number: 0,
             description: String::from("Write here"),
@@ -42,7 +45,24 @@ impl Config {
             beam: String::from("16C"),
             energy: 0.0,
             magnetic_field: 0.0,
-        };
+            frequency: 0.0,
+        }
+    }
+
+    pub fn save(&self) -> Result<(), ConfigError> {
+        let mut file = File::create(&self.path)?;
+        let yaml_str = serde_yaml::to_string::<Config>(self)?;
+        file.write_all(yaml_str.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn load(&mut self, path: PathBuf) -> Result<(), ConfigError> {
+        let mut file = File::open(&path)?;
+        let mut yaml_str = String::new();
+        file.read_to_string(&mut yaml_str)?;
+        *self = serde_yaml::from_str::<Config>(&yaml_str)?;
+        self.path = path;
+        Ok(())
     }
 
     /// Get the path to a configuration table which we will log experiment data to
@@ -61,7 +81,7 @@ impl Config {
         let table_path = table_dir.join(format!("{}.csv", self.experiment));
         if !table_path.exists() {
             if let Ok(mut file) = std::fs::File::create(&table_path) {
-                match file.write(HEADER_STR.as_bytes()) {
+                match file.write_all(HEADER_STR.as_bytes()) {
                     Ok(_) => (),
                     Err(e) => {
                         tracing::error!("Could not write header to config table: {}", e);
@@ -70,7 +90,7 @@ impl Config {
             }
         }
 
-        return table_path;
+        table_path
     }
 
     /// Write experiment data to a log table
@@ -78,7 +98,7 @@ impl Config {
         let path = self.get_config_table();
         if let Ok(mut file) = std::fs::OpenOptions::new().append(true).open(path) {
             let row = format!(
-                "{},{},{},{},{},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2}\n",
+                "{},{},{},{},{},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:2}\n",
                 self.run_number,
                 ellapsed_time.as_secs(),
                 self.description,
@@ -91,13 +111,13 @@ impl Config {
                 self.v_mm,
                 self.v_cathode,
                 self.e_drift,
-                self.e_trans
+                self.e_trans,
+                self.frequency
             );
-            match file.write(row.as_bytes()) {
+            match file.write_all(row.as_bytes()) {
                 Ok(_) => (),
                 Err(e) => {
                     tracing::error!("Could not write row to config table: {}", e);
-                    return;
                 }
             }
         }

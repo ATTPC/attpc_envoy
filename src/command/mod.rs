@@ -1,3 +1,3 @@
 //! Scripting extension to the envoy system
-pub mod command;
+pub mod bash_command;
 mod constants;

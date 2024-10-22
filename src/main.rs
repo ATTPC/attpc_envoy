@@ -101,11 +101,12 @@ fn main() {
     tracing::info!("Tracing initialized!");
 
     //Start our application
-    let mut native_options = eframe::NativeOptions::default();
-    native_options.viewport = eframe::egui::ViewportBuilder::default()
-        .with_title("AT-TPC Envoy")
-        .with_inner_size(eframe::epaint::vec2(1400.0, 1225.0));
-    native_options.follow_system_theme = false;
+    let native_options = eframe::NativeOptions {
+        viewport: eframe::egui::ViewportBuilder::default()
+            .with_title("AT-TPC Envoy")
+            .with_inner_size(eframe::epaint::vec2(1400.0, 1100.0)),
+        ..Default::default()
+    };
     match eframe::run_native(
         "ATTPC Envoy",
         native_options,
@@ -114,6 +115,4 @@ fn main() {
         Ok(()) => (),
         Err(e) => tracing::error!("Eframe error: {}", e),
     }
-
-    return;
 }

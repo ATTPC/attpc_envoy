@@ -1,4 +1,7 @@
-use super::message::{EmbassyMessage, MessageKind};
+use super::{
+    ecc_operation::ECCOperation,
+    message::{EmbassyMessage, MessageKind},
+};
 use tokio::sync::mpsc::error::SendError;
 
 #[derive(Debug)]
@@ -33,21 +36,21 @@ impl std::error::Error for ECCStatusError {}
 
 #[derive(Debug)]
 pub enum EnvoyError {
-    RequestError(reqwest::Error),
+    BadRequest(reqwest::Error),
     SendError(SendError<EmbassyMessage>),
-    StatusError(ECCStatusError),
-    OperationError(ECCOperationError),
-    MessageParseError(serde_yaml::Error),
-    StringToIntError(std::num::ParseIntError),
-    StringToFloatError(std::num::ParseFloatError),
-    XMLError(quick_xml::Error),
-    XMLUtf8Error(std::string::FromUtf8Error),
-    XMLConversionError,
+    InvalidStatus(ECCStatusError),
+    BadOperation(ECCOperationError),
+    FailedMessageParse(serde_yaml::Error),
+    InvalidStringToInt(std::num::ParseIntError),
+    InvalidStringToFloat(std::num::ParseFloatError),
+    FailedXMLParse(quick_xml::Error),
+    FailedXMLUtf8(std::string::FromUtf8Error),
+    FailedXMLConvert,
 }
 
 impl From<reqwest::Error> for EnvoyError {
     fn from(value: reqwest::Error) -> Self {
-        Self::RequestError(value)
+        Self::BadRequest(value)
     }
 }
 
@@ -59,61 +62,67 @@ impl From<SendError<EmbassyMessage>> for EnvoyError {
 
 impl From<ECCStatusError> for EnvoyError {
     fn from(value: ECCStatusError) -> Self {
-        Self::StatusError(value)
+        Self::InvalidStatus(value)
     }
 }
 
 impl From<ECCOperationError> for EnvoyError {
     fn from(value: ECCOperationError) -> Self {
-        Self::OperationError(value)
+        Self::BadOperation(value)
     }
 }
 
 impl From<serde_yaml::Error> for EnvoyError {
     fn from(value: serde_yaml::Error) -> Self {
-        Self::MessageParseError(value)
+        Self::FailedMessageParse(value)
     }
 }
 
 impl From<std::num::ParseIntError> for EnvoyError {
     fn from(value: std::num::ParseIntError) -> Self {
-        Self::StringToIntError(value)
+        Self::InvalidStringToInt(value)
     }
 }
 
 impl From<std::num::ParseFloatError> for EnvoyError {
     fn from(value: std::num::ParseFloatError) -> Self {
-        Self::StringToFloatError(value)
+        Self::InvalidStringToFloat(value)
     }
 }
 
 impl From<quick_xml::Error> for EnvoyError {
     fn from(value: quick_xml::Error) -> Self {
-        Self::XMLError(value)
+        Self::FailedXMLParse(value)
     }
 }
 
 impl From<std::string::FromUtf8Error> for EnvoyError {
     fn from(value: std::string::FromUtf8Error) -> Self {
-        Self::XMLUtf8Error(value)
+        Self::FailedXMLUtf8(value)
     }
 }
 
 impl std::fmt::Display for EnvoyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::RequestError(e) => {
+            Self::BadRequest(e) => {
                 write!(f, "Envoy recieved an error while making a request: {e}")
             }
-            Self::MessageParseError(e) => write!(f, "Envoy failed to parse a message to yaml: {e}"),
-            Self::OperationError(e) => write!(f, "Envoy recieved operation error: {e}"),
-            Self::StatusError(e) => write!(f, "Envoy recieved status error: {e}"),
+            Self::FailedMessageParse(e) => {
+                write!(f, "Envoy failed to parse a message to yaml: {e}")
+            }
+            Self::BadOperation(e) => write!(f, "Envoy recieved operation error: {e}"),
+            Self::InvalidStatus(e) => write!(f, "Envoy recieved status error: {e}"),
             Self::SendError(e) => write!(f, "Envoy failed to send a message: {e}"),
-            Self::StringToIntError(e) => write!(f, "Envoy failed to parse string to integer: {e}"),
-            Self::StringToFloatError(e) => write!(f, "Envoy failed to parse string to float: {e}"),
-            Self::XMLError(e) => write!(f, "Envoy failed to parse XML body: {e}"),
-            Self::XMLUtf8Error(e) => write!(f, "Envoy failed to convert XML to String: {e}"),
-            Self::XMLConversionError => write!(f, "Envoy failed to convert XML data!"),
+            Self::InvalidStringToInt(e) => {
+                write!(f, "Envoy failed to parse string to integer: {e}")
+            }
+            Self::InvalidStringToFloat(e) => {
+                write!(f, "Envoy failed to parse string to float: {e}")
+            }
+            Self::FailedXMLParse(e) => write!(f, "Envoy failed to parse XML body: {e}"),
+            Self::FailedXMLUtf8(e) => write!(f, "Envoy failed to convert XML to String: {e}"),
+            Self::FailedXMLConvert => write!(f, "Envoy failed to convert XML data!"),
         }
     }
 }
@@ -122,38 +131,48 @@ impl std::error::Error for EnvoyError {}
 
 #[derive(Debug)]
 pub enum EmbassyError {
-    MessageSendError(SendError<EmbassyMessage>),
-    MessageKindError(MessageKind, MessageKind),
-    MessageParseError(serde_yaml::Error),
-    MessageRecieveError,
+    FailedSend(SendError<EmbassyMessage>),
+    InvalidKind(MessageKind, MessageKind),
+    FailedParse(serde_yaml::Error),
+    FailedRecieve,
+    FailedJoin(tokio::task::JoinError),
+    InvalidTransition(ECCOperation),
 }
 
 impl From<SendError<EmbassyMessage>> for EmbassyError {
     fn from(value: SendError<EmbassyMessage>) -> Self {
-        Self::MessageSendError(value)
+        Self::FailedSend(value)
     }
 }
 
 impl From<serde_yaml::Error> for EmbassyError {
     fn from(value: serde_yaml::Error) -> Self {
-        Self::MessageParseError(value)
+        Self::FailedParse(value)
+    }
+}
+
+impl From<tokio::task::JoinError> for EmbassyError {
+    fn from(value: tokio::task::JoinError) -> Self {
+        Self::FailedJoin(value)
     }
 }
 
 impl std::fmt::Display for EmbassyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MessageKindError(expected, recieved) => write!(
+            Self::InvalidKind(expected, recieved) => write!(
                 f,
                 "Embassy expected {expected} message, recieved {recieved} message!"
             ),
-            Self::MessageSendError(e) => {
+            Self::FailedSend(e) => {
                 write!(f, "Embassy had an error sending the following message: {e}")
             }
-            Self::MessageParseError(e) => write!(f, "Embassy had an error parsing a message: {e}"),
-            Self::MessageRecieveError => {
+            Self::FailedParse(e) => write!(f, "Embassy had an error parsing a message: {e}"),
+            Self::FailedRecieve => {
                 write!(f, "Embassy communication lines were disconnected!")
             }
+            Self::FailedJoin(e) => write!(f, "Embassy failed to join a task: {e}"),
+            Self::InvalidTransition(op) => write!(f, "Attempted invalid transition: {op}"),
         }
     }
 }
