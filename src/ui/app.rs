@@ -34,6 +34,7 @@ impl EnvoyApp {
         let mut visuals = eframe::egui::Visuals::dark();
         visuals.override_text_color = Some(DEFAULT_TEXT_COLOR);
         cc.egui_ctx.set_visuals(visuals);
+        cc.egui_ctx.set_theme(eframe::egui::Theme::Dark);
         EnvoyApp {
             config: Config::new(),
             embassy: Embassy::new(runtime),
