@@ -1,10 +1,23 @@
 use super::error::ConfigError;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::path::PathBuf;
 
-const HEADER_STR: &str = "Run,Duration(s),Note,Gas,Beam,Energy(MeV/U),Pressure(Torr),B-Field(T),V_THGEM(V),V_MM(V),V_Cathode(kV),E-Drift(V),E-Trans(V),GET_Freq(MHz)\n";
+const DEFAULT_FIELDS: [&str; 11] = [
+    "Target Gas",
+    "Beam",
+    "Energy (MeV/U)",
+    "Pressure (Torr)",
+    "B-Field (T)",
+    "V_THGEM (V)",
+    "V_MM (V)",
+    "V_Cathode (kV)",
+    "E-Drift (V)",
+    "E-Trans (V)",
+    "GET Freq. (MHz)",
+];
 
 /// (De)Serializable application configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -15,37 +28,21 @@ pub struct Config {
     pub experiment: String,
     pub run_number: i32,
     pub description: String,
-    pub pressure: f32,
-    pub v_thgem: f32,
-    pub v_mm: f32,
-    pub e_drift: f32,
-    pub v_cathode: f32,
-    pub e_trans: f32,
-    pub gas: String,
-    pub beam: String,
-    pub energy: f32,
-    pub magnetic_field: f32,
-    pub frequency: f32,
+    pub fields: BTreeMap<String, String>,
 }
 
 impl Config {
     pub fn new() -> Self {
+        let mut fields = BTreeMap::new();
+        for field in DEFAULT_FIELDS {
+            fields.insert(field.to_string(), String::default());
+        }
         Config {
             path: PathBuf::from("example.yml"),
             experiment: String::from("Exp"),
             run_number: 0,
             description: String::from("Write here"),
-            pressure: 0.0,
-            v_thgem: 0.0,
-            v_mm: 0.0,
-            e_drift: 0.0,
-            v_cathode: 0.0,
-            e_trans: 0.0,
-            gas: String::from("H2"),
-            beam: String::from("16C"),
-            energy: 0.0,
-            magnetic_field: 0.0,
-            frequency: 0.0,
+            fields,
         }
     }
 
@@ -65,8 +62,16 @@ impl Config {
         Ok(())
     }
 
+    pub fn add_field(&mut self, field: String, value: String) {
+        self.fields.insert(field, value);
+    }
+
     /// Get the path to a configuration table which we will log experiment data to
     fn get_config_table(&self) -> PathBuf {
+        let mut header = String::from("Run,Note,Duration");
+        for key in self.fields.keys() {
+            header = format!("{header},{key}");
+        }
         let table_dir = PathBuf::from("tables/");
         if !table_dir.exists() {
             match std::fs::create_dir(&table_dir) {
@@ -81,10 +86,52 @@ impl Config {
         let table_path = table_dir.join(format!("{}.csv", self.experiment));
         if !table_path.exists() {
             if let Ok(mut file) = std::fs::File::create(&table_path) {
-                match file.write_all(HEADER_STR.as_bytes()) {
+                match file.write_all(header.as_bytes()) {
                     Ok(_) => (),
                     Err(e) => {
                         tracing::error!("Could not write header to config table: {}", e);
+                    }
+                }
+            }
+        } else {
+            let mut lines = Vec::new();
+            if let Ok(file) = std::fs::File::open(&table_path) {
+                let mut reader = std::io::BufReader::new(file);
+                let mut header_line = String::new();
+                reader.read_line(&mut header_line).expect("No header line!");
+                if header_line == header {
+                    return table_path;
+                }
+                lines = match reader.lines().collect() {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::error!("Could not read existing table! Error: {}", e);
+                        return table_path;
+                    }
+                }
+            }
+            if let Ok(mut file) = std::fs::File::create(&table_path) {
+                match file.write_all(header.as_bytes()) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        tracing::error!(
+                            "Could not write header to run log file at reformat: {}",
+                            e
+                        );
+                        return table_path;
+                    }
+                }
+                for line in lines {
+                    match file.write_all(line.as_bytes()) {
+                        Ok(_) => (),
+                        Err(e) => {
+                            tracing::error!(
+                                "Could not write line {} when reformating run log: {}",
+                                line,
+                                e
+                            );
+                            return table_path;
+                        }
                     }
                 }
             }
@@ -96,24 +143,16 @@ impl Config {
     /// Write experiment data to a log table
     pub fn write_table(&self, ellapsed_time: std::time::Duration) {
         let path = self.get_config_table();
+        let mut row = format!(
+            "{},{},{}",
+            self.run_number,
+            self.description,
+            ellapsed_time.as_secs()
+        );
         if let Ok(mut file) = std::fs::OpenOptions::new().append(true).open(path) {
-            let row = format!(
-                "{},{},{},{},{},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:.2},{:2}\n",
-                self.run_number,
-                ellapsed_time.as_secs(),
-                self.description,
-                self.gas,
-                self.beam,
-                self.energy,
-                self.pressure,
-                self.magnetic_field,
-                self.v_thgem,
-                self.v_mm,
-                self.v_cathode,
-                self.e_drift,
-                self.e_trans,
-                self.frequency
-            );
+            for field in self.fields.values() {
+                row = format!("{row},{field}")
+            }
             match file.write_all(row.as_bytes()) {
                 Ok(_) => (),
                 Err(e) => {

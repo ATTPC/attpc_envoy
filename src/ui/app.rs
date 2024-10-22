@@ -4,6 +4,7 @@ use super::ecc_panel::render_ecc_panel;
 use super::graph_manager::GraphManager;
 use super::graph_panel::render_graph_panel;
 use super::router_panel::render_data_router_panel;
+use super::run_log_panel::render_run_log_panel;
 use crate::command::bash_command::{execute, CommandName, CommandStatus};
 use crate::envoy::embassy::Embassy;
 use crate::envoy::status_manager::StatusManager;
@@ -23,6 +24,7 @@ pub struct EnvoyApp {
     pub status: StatusManager,
     pub graphs: GraphManager,
     pub run_start_time: Instant,
+    pub new_field_name: String,
 }
 
 //*************//
@@ -41,6 +43,7 @@ impl EnvoyApp {
             status: StatusManager::new(),
             graphs: GraphManager::new(10, 2),
             run_start_time: Instant::now(),
+            new_field_name: String::default(),
         }
     }
 
@@ -216,6 +219,7 @@ impl eframe::App for EnvoyApp {
             self.graphs
                 .update(self.status.get_surveyor_status_response());
         }
+        render_run_log_panel(self, ctx);
         render_config_panel(self, ctx);
         render_graph_panel(self, ctx);
         render_ecc_panel(self, ctx);
