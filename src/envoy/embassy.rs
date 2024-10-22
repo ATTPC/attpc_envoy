@@ -63,6 +63,7 @@ impl Embassy {
                 self.runtime.block_on(handle)?
             }
         }
+        self.is_connected = false;
         Ok(())
     }
 
