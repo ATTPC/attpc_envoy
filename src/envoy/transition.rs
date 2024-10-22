@@ -9,6 +9,9 @@ pub fn poll_embassy(
     embassy: &mut Embassy,
     status_manager: &mut StatusManager,
 ) -> Result<(), EmbassyError> {
+    if !embassy.is_connected() {
+        return Ok(());
+    }
     match embassy.poll_messages() {
         Ok(messages) => {
             status_manager.handle_messages(&messages)?;
