@@ -92,8 +92,11 @@ async fn run_surveyor_envoy(
             }
 
             _ = tokio::time::sleep(Duration::from_secs(STATUS_WAIT_TIME_SEC)) => {
-                if let Ok(Some(response)) = submit_check_status(&config, &client, &mut previous_bytes).await {
-                        outgoing.send(response).await?;
+                if let Ok(maybe) = submit_check_status(&config, &client, &mut previous_bytes).await {
+                    match maybe {
+                        Some(response) => outgoing.send(response).await?,
+                        None => ()
+                    }
                 } else {
                     let message = EmbassyMessage::compose_surveyor_response(serde_yaml::to_string(&SurveyorResponse::default())?, config.id);
                     outgoing.send(message).await?
