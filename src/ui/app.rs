@@ -209,7 +209,10 @@ impl eframe::App for EnvoyApp {
             Ok(()) => (),
             Err(e) => tracing::error!("An error occurred when polling the embassy: {}", e),
         }
-        if self.graphs.should_update() && self.embassy.is_connected() {
+        if self.graphs.should_update()
+            && self.embassy.is_connected()
+            && self.status.is_system_running()
+        {
             self.graphs
                 .update(self.status.get_surveyor_status_response());
         }
