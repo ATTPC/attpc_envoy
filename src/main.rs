@@ -104,7 +104,7 @@ fn main() {
     let native_options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("AT-TPC Envoy")
-            .with_inner_size(eframe::epaint::vec2(1400.0, 1225.0)),
+            .with_inner_size(eframe::epaint::vec2(1400.0, 1100.0)),
         ..Default::default()
     };
     match eframe::run_native(
