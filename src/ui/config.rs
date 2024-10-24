@@ -72,6 +72,7 @@ impl Config {
         for key in self.fields.keys() {
             header = format!("{header},{key}");
         }
+        header = format!("{header}\n");
         let table_dir = PathBuf::from("tables/");
         if !table_dir.exists() {
             match std::fs::create_dir(&table_dir) {
@@ -99,7 +100,7 @@ impl Config {
                 let mut reader = std::io::BufReader::new(file);
                 let mut header_line = String::new();
                 reader.read_line(&mut header_line).expect("No header line!");
-                if header_line == header {
+                if format!("{header_line}\n") == header {
                     return table_path;
                 }
                 lines = match reader.lines().collect() {
@@ -122,7 +123,8 @@ impl Config {
                     }
                 }
                 for line in lines {
-                    match file.write_all(line.as_bytes()) {
+                    let line_end = format!("{line}\n");
+                    match file.write_all(line_end.as_bytes()) {
                         Ok(_) => (),
                         Err(e) => {
                             tracing::error!(
@@ -153,6 +155,7 @@ impl Config {
             for field in self.fields.values() {
                 row = format!("{row},{field}")
             }
+            row = format!("{row}\n");
             match file.write_all(row.as_bytes()) {
                 Ok(_) => (),
                 Err(e) => {
