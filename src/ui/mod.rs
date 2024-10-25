@@ -8,4 +8,5 @@ mod error;
 mod graph_manager;
 mod graph_panel;
 mod router_panel;
+mod run_log_panel;
 mod style;
