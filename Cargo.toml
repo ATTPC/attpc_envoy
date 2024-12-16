@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 eframe = "0.29.1"
-egui_extras = "0.29.1"
+egui_extras = "0.30.0"
 egui_plot = "0.29.0"
 human_bytes = "0.4.3"
 quick-xml = { version = "0.37.1", features = ["serialize"] }
