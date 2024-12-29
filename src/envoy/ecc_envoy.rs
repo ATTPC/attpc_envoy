@@ -4,7 +4,7 @@ use super::constants::{
 };
 use super::ecc_operation::ECCOperation;
 use super::error::EnvoyError;
-use super::message::EmbassyMessage;
+use super::message::{EmbassyMessage, MessageKind, ToMessage};
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -47,6 +47,12 @@ pub struct ECCOperationResponse {
     pub text: String,
 }
 
+impl ToMessage for ECCOperationResponse {
+    fn message_kind(&self) -> MessageKind {
+        MessageKind::ECCOpResponse
+    }
+}
+
 /// Response type for ECC Status query
 /// Native format is XML
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
@@ -55,6 +61,12 @@ pub struct ECCStatusResponse {
     pub error_message: String,
     pub state: i32,
     pub transition: i32,
+}
+
+impl ToMessage for ECCStatusResponse {
+    fn message_kind(&self) -> MessageKind {
+        MessageKind::ECCStatus
+    }
 }
 
 /// Struct defining a minimal getECCServer configuration
@@ -198,7 +210,7 @@ async fn run_ecc_envoy(
                     outgoing.send(response).await?
                 } else {
                     let response = ECCStatusResponse { error_code: 0, error_message: String::from(""), state: 0, transition: 0 };
-                    let message = EmbassyMessage::compose_ecc_status(serde_yaml::to_string(&response)?, config.id);
+                    let message = EmbassyMessage::compose(response, config.id);
                     outgoing.send(message).await?
                 }
             }
@@ -244,7 +256,7 @@ fn compose_operation_request(
     config: &ECCConfig,
     message: EmbassyMessage,
 ) -> Result<String, EnvoyError> {
-    let op = ECCOperation::try_from(message.operation)?;
+    let op: ECCOperation = serde_json::from_str(&message.body)?;
     let body = config.compose_config_body();
     let link = config.compose_data_link_body();
     Ok(format!(
@@ -293,10 +305,7 @@ async fn parse_operation_response(
         _ => String::from(""),
     };
 
-    Ok(EmbassyMessage::compose_ecc_response(
-        serde_yaml::to_string(&parsed)?,
-        config.id,
-    ))
+    Ok(EmbassyMessage::compose(parsed, config.id))
 }
 
 /// Parse the server status response
@@ -347,8 +356,7 @@ async fn parse_status_response(
         _ => return Err(EnvoyError::FailedXMLConvert),
     };
 
-    let status_response =
-        EmbassyMessage::compose_ecc_status(serde_yaml::to_string(&parsed)?, config.id);
+    let status_response = EmbassyMessage::compose(parsed, config.id);
     Ok(status_response)
 }
 

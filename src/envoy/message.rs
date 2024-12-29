@@ -1,15 +1,16 @@
 use super::ecc_envoy::{ECCOperationResponse, ECCStatusResponse};
 use super::error::EmbassyError;
-use super::surveyor_envoy::SurveyorResponse;
-
-const MESSAGE_EMPTY_FIELD: &str = "None";
+use super::sentry_types::SentryStatus;
+use serde::Serialize;
 
 /// Types of messages the Embassy might recieve
 #[derive(Debug, Clone, PartialEq)]
 pub enum MessageKind {
     ECCOperation,
+    ECCOpResponse,
     ECCStatus,
-    Surveyor,
+    SentryOperation,
+    SentryStatus,
     Cancel,
 }
 
@@ -17,11 +18,17 @@ impl std::fmt::Display for MessageKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ECCOperation => write!(f, "ECCOperation"),
+            Self::ECCOpResponse => write!(f, "ECCOpResponse"),
             Self::ECCStatus => write!(f, "ECCStatus"),
-            Self::Surveyor => write!(f, "Surveyor"),
+            Self::SentryOperation => write!(f, "SentryOperation"),
+            Self::SentryStatus => write!(f, "SentryStatus"),
             Self::Cancel => write!(f, "Cancel"),
         }
     }
+}
+
+pub trait ToMessage {
+    fn message_kind(&self) -> MessageKind;
 }
 
 /// A unified message type to simplify the transfer of data from the various types of envoys to
@@ -32,68 +39,33 @@ impl std::fmt::Display for MessageKind {
 pub struct EmbassyMessage {
     pub kind: MessageKind,
     pub id: usize,
-    pub operation: String,
-    pub response: String,
+    pub body: String,
 }
 
 impl std::fmt::Display for EmbassyMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "EmbassyMessage from {} of kind {} for operation {} with response: {}",
-            self.id, self.kind, self.operation, self.response
+            "EmbassyMessage from {} of kind {} with body: {}",
+            self.id, self.kind, self.body
         )
     }
 }
 
 impl EmbassyMessage {
-    /// Compose an EmbassyMessage from a SurveyorEnvoy status response
-    pub fn compose_surveyor_response(response: String, id: usize) -> Self {
-        EmbassyMessage {
-            kind: MessageKind::Surveyor,
+    pub fn compose(item: impl ToMessage + Serialize, id: usize) -> Self {
+        Self {
+            kind: item.message_kind(),
             id,
-            operation: String::from(MESSAGE_EMPTY_FIELD),
-            response,
+            body: serde_json::to_string(&item).expect("Serializing failed somehow..."),
         }
     }
 
-    /// Compose an EmbassyMessage from an ECCOperation request
-    pub fn compose_ecc_op(operation: String, id: usize) -> Self {
-        EmbassyMessage {
-            kind: MessageKind::ECCOperation,
-            id,
-            operation,
-            response: String::from(MESSAGE_EMPTY_FIELD),
-        }
-    }
-
-    /// Compose an EmbassyMessage from an ECCOperation response
-    pub fn compose_ecc_response(response: String, id: usize) -> Self {
-        EmbassyMessage {
-            kind: MessageKind::ECCOperation,
-            id,
-            operation: String::from(MESSAGE_EMPTY_FIELD),
-            response,
-        }
-    }
-
-    /// Compose an EmbassyMessage from an ECC status response
-    pub fn compose_ecc_status(response: String, id: usize) -> Self {
-        EmbassyMessage {
-            kind: MessageKind::ECCStatus,
-            id,
-            operation: String::from(MESSAGE_EMPTY_FIELD),
-            response,
-        }
-    }
-
-    /// Compose an EmbassyMessage to cancel all tasks
     pub fn compose_cancel() -> Self {
-        EmbassyMessage {
+        Self {
             kind: MessageKind::Cancel,
             id: 0,
-            operation: String::from(MESSAGE_EMPTY_FIELD),
-            response: String::from(MESSAGE_EMPTY_FIELD),
+            body: String::from("Cancel"),
         }
     }
 }
@@ -102,9 +74,7 @@ impl TryInto<ECCStatusResponse> for EmbassyMessage {
     type Error = EmbassyError;
     fn try_into(self) -> Result<ECCStatusResponse, Self::Error> {
         match self.kind {
-            MessageKind::ECCStatus => {
-                Ok(serde_yaml::from_str::<ECCStatusResponse>(&self.response)?)
-            }
+            MessageKind::ECCStatus => Ok(serde_json::from_str::<ECCStatusResponse>(&self.body)?),
             _ => Err(Self::Error::InvalidKind(MessageKind::ECCStatus, self.kind)),
         }
     }
@@ -114,9 +84,7 @@ impl TryInto<ECCStatusResponse> for &EmbassyMessage {
     type Error = EmbassyError;
     fn try_into(self) -> Result<ECCStatusResponse, Self::Error> {
         match self.kind {
-            MessageKind::ECCStatus => {
-                Ok(serde_yaml::from_str::<ECCStatusResponse>(&self.response)?)
-            }
+            MessageKind::ECCStatus => Ok(serde_json::from_str::<ECCStatusResponse>(&self.body)?),
             _ => Err(Self::Error::InvalidKind(
                 MessageKind::ECCStatus,
                 self.kind.clone(),
@@ -129,9 +97,9 @@ impl TryInto<ECCOperationResponse> for EmbassyMessage {
     type Error = EmbassyError;
     fn try_into(self) -> Result<ECCOperationResponse, Self::Error> {
         match self.kind {
-            MessageKind::ECCOperation => Ok(serde_yaml::from_str::<ECCOperationResponse>(
-                &self.response,
-            )?),
+            MessageKind::ECCOperation => {
+                Ok(serde_json::from_str::<ECCOperationResponse>(&self.body)?)
+            }
             _ => Err(Self::Error::InvalidKind(
                 MessageKind::ECCOperation,
                 self.kind,
@@ -144,9 +112,9 @@ impl TryInto<ECCOperationResponse> for &EmbassyMessage {
     type Error = EmbassyError;
     fn try_into(self) -> Result<ECCOperationResponse, Self::Error> {
         match self.kind {
-            MessageKind::ECCOperation => Ok(serde_yaml::from_str::<ECCOperationResponse>(
-                &self.response,
-            )?),
+            MessageKind::ECCOperation => {
+                Ok(serde_json::from_str::<ECCOperationResponse>(&self.body)?)
+            }
             _ => Err(Self::Error::InvalidKind(
                 MessageKind::ECCOperation,
                 self.kind.clone(),
@@ -155,23 +123,23 @@ impl TryInto<ECCOperationResponse> for &EmbassyMessage {
     }
 }
 
-impl TryInto<SurveyorResponse> for EmbassyMessage {
+impl TryInto<SentryStatus> for EmbassyMessage {
     type Error = EmbassyError;
-    fn try_into(self) -> Result<SurveyorResponse, Self::Error> {
+    fn try_into(self) -> Result<SentryStatus, Self::Error> {
         match self.kind {
-            MessageKind::Surveyor => Ok(serde_yaml::from_str::<SurveyorResponse>(&self.response)?),
-            _ => Err(Self::Error::InvalidKind(MessageKind::Surveyor, self.kind)),
+            MessageKind::SentryStatus => Ok(serde_json::from_str::<SentryStatus>(&self.body)?),
+            _ => Err(Self::Error::InvalidKind(MessageKind::ECCStatus, self.kind)),
         }
     }
 }
 
-impl TryInto<SurveyorResponse> for &EmbassyMessage {
+impl TryInto<SentryStatus> for &EmbassyMessage {
     type Error = EmbassyError;
-    fn try_into(self) -> Result<SurveyorResponse, Self::Error> {
+    fn try_into(self) -> Result<SentryStatus, Self::Error> {
         match self.kind {
-            MessageKind::Surveyor => Ok(serde_yaml::from_str::<SurveyorResponse>(&self.response)?),
+            MessageKind::SentryStatus => Ok(serde_json::from_str::<SentryStatus>(&self.body)?),
             _ => Err(Self::Error::InvalidKind(
-                MessageKind::Surveyor,
+                MessageKind::ECCStatus,
                 self.kind.clone(),
             )),
         }

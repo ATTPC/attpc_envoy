@@ -1,11 +1,5 @@
 use super::config::Config;
-use super::config_panel::render_config_panel;
-use super::ecc_panel::render_ecc_panel;
 use super::graph_manager::GraphManager;
-use super::graph_panel::render_graph_panel;
-use super::router_panel::render_data_router_panel;
-use super::run_log_panel::render_run_log_panel;
-use crate::command::bash_command::{execute, CommandName, CommandStatus};
 use crate::envoy::embassy::Embassy;
 use crate::envoy::status_manager::StatusManager;
 use crate::envoy::transition::*;
@@ -81,21 +75,9 @@ impl EnvoyApp {
 
         //Check the run number status using the shell scripting engine
         tracing::info!("Starting run {} ...", self.config.run_number);
-        tracing::info!("Checking if run number is ok...");
-        match execute(
-            CommandName::CheckRunExists,
-            self.status.get_surveyor_status_response(),
-            &self.config.experiment,
-            &self.config.run_number,
-        ) {
-            CommandStatus::Success => {
-                tracing::warn!("Tried to start a run with a run number that was already used! Either delete the extant data or change the run number!");
-                return;
-            }
-            CommandStatus::Failure => (),
-            CommandStatus::CouldNotExecute => return,
-        }
-        tracing::info!("Run number validated.");
+        // TODO: I should add sentry functionality for this
+        // tracing::info!("Checking if run number is ok...");
+        // tracing::info!("Run number validated.");
 
         tracing::info!("Re-configuring MuTaNT to reset timestamps...");
         match reconfigure_mutant_blocking(&mut self.embassy, &mut self.status) {
@@ -152,35 +134,30 @@ impl EnvoyApp {
         }
 
         tracing::info!("CoBos stopped.");
-        tracing::info!("Moving .graw files...");
+        tracing::info!("Cataloging .graw files...");
 
-        match execute(
-            CommandName::MoveGrawFiles,
-            self.status.get_surveyor_status_response(),
+        match catalog_run(
+            &mut self.embassy,
+            &mut self.status,
             &self.config.experiment,
             &self.config.run_number,
         ) {
-            CommandStatus::Success => (),
-            CommandStatus::Failure => {
-                tracing::error!("Unable to move the graw files after the stop run signal!")
-            }
-            CommandStatus::CouldNotExecute => (),
+            Ok(_) => (),
+            Err(e) => tracing::error!("Failed to submit catalog operation to sentry: {e}"),
         }
 
         tracing::info!(".graw files moved.");
         tracing::info!("Backing up GET configuration...");
 
-        match execute(
-            CommandName::BackupConfig,
-            self.status.get_surveyor_status_response(),
+        match backup_configs(
+            &mut self.embassy,
             &self.config.experiment,
             &self.config.run_number,
         ) {
-            CommandStatus::Success => (),
-            CommandStatus::Failure => {
-                tracing::error!("Could not backup config files after the stop run signal")
+            Ok(_) => (),
+            Err(e) => {
+                tracing::error!("Could not backup config files after the stop run signal: {e}")
             }
-            CommandStatus::CouldNotExecute => (),
         }
 
         tracing::info!("GET configuration backed up.");
@@ -216,14 +193,13 @@ impl eframe::App for EnvoyApp {
             && self.embassy.is_connected()
             && self.status.is_system_running()
         {
-            self.graphs
-                .update(self.status.get_surveyor_status_response());
+            self.graphs.update(self.status.get_sentry_status_response());
         }
-        render_run_log_panel(self, ctx);
-        render_config_panel(self, ctx);
-        render_graph_panel(self, ctx);
-        render_ecc_panel(self, ctx);
-        render_data_router_panel(self, ctx);
+        super::run_log_panel::render_run_log_panel(self, ctx);
+        super::config_panel::render_config_panel(self, ctx);
+        super::graph_panel::render_graph_panel(self, ctx);
+        super::ecc_panel::render_ecc_panel(self, ctx);
+        super::sentry_panel::render_sentry_panel(self, ctx);
         ctx.request_repaint_after(std::time::Duration::from_secs(1));
     }
 }

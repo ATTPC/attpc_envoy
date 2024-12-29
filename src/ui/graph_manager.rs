@@ -1,5 +1,5 @@
 use crate::envoy::constants::NUMBER_OF_MODULES;
-use crate::envoy::surveyor_envoy::SurveyorResponse;
+use crate::envoy::sentry_types::SentryStatus;
 use egui_plot::Line;
 use std::{
     collections::VecDeque,
@@ -96,7 +96,7 @@ impl GraphManager {
 
     /// Read messages from the embassy, looking for SurveyorResponses. If one is found, send
     /// the rate value to the appropriate graph
-    pub fn update(&mut self, statuses: &[SurveyorResponse]) {
+    pub fn update(&mut self, statuses: &[SentryStatus]) {
         self.last_update_time = Instant::now();
         let ellapsed_time = self.last_update_time - self.start_time;
         if self.time_points.len() == self.max_points {
@@ -105,7 +105,7 @@ impl GraphManager {
         self.time_points.push_back(ellapsed_time.as_secs_f64());
         for (id, status) in statuses.iter().enumerate() {
             if let Some(graph) = self.graphs.get_mut(id) {
-                graph.add_point(status.data_rate);
+                graph.add_point(status.data_rate_mb);
             }
         }
     }

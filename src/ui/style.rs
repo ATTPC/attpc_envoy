@@ -1,5 +1,5 @@
 use crate::envoy::ecc_operation::ECCStatus;
-use crate::envoy::surveyor_status::{SurveyorDiskStatus, SurveyorStatus};
+use crate::envoy::sentry_types::SentryServerStatus;
 use eframe::egui::Color32;
 
 impl From<&ECCStatus> for Color32 {
@@ -17,23 +17,23 @@ impl From<&ECCStatus> for Color32 {
     }
 }
 
-impl From<&SurveyorStatus> for Color32 {
-    fn from(value: &SurveyorStatus) -> Color32 {
+impl From<&SentryServerStatus> for Color32 {
+    fn from(value: &SentryServerStatus) -> Color32 {
         match value {
-            SurveyorStatus::Offline => Color32::GOLD,
-            SurveyorStatus::Online => Color32::GREEN,
+            SentryServerStatus::Offline => Color32::GOLD,
+            SentryServerStatus::Online => Color32::GREEN,
             _ => Color32::RED,
         }
     }
 }
 
-impl From<&SurveyorDiskStatus> for Color32 {
-    fn from(value: &SurveyorDiskStatus) -> Color32 {
-        match value {
-            SurveyorDiskStatus::Filled => Color32::GOLD,
-            SurveyorDiskStatus::Empty => Color32::GREEN,
-            SurveyorDiskStatus::NA => Color32::LIGHT_GRAY,
-        }
+pub fn n_files_color(n_files: &i32) -> Color32 {
+    if *n_files == 0 {
+        Color32::LIGHT_GRAY
+    } else if *n_files < 0 {
+        Color32::RED
+    } else {
+        Color32::GOLD
     }
 }
 

@@ -3,6 +3,7 @@ use super::ecc_operation::ECCOperation;
 use super::embassy::Embassy;
 use super::error::EmbassyError;
 use super::message::EmbassyMessage;
+use super::sentry_types::{SentryOperation, SentryParameters};
 use super::status_manager::StatusManager;
 
 pub fn poll_embassy(
@@ -46,12 +47,10 @@ pub fn transition_ecc(
         };
         match operation {
             ECCOperation::Invalid => (),
-            _ => {
-                match embassy.submit_message(EmbassyMessage::compose_ecc_op(operation.into(), id)) {
-                    Ok(()) => (),
-                    Err(e) => tracing::error!("Embassy had an error sending a message: {}", e),
-                }
-            }
+            _ => match embassy.submit_message(EmbassyMessage::compose(operation, id)) {
+                Ok(()) => (),
+                Err(e) => tracing::error!("Embassy had an error sending a message: {}", e),
+            },
         }
         status_manager.set_ecc_busy(id);
     }
@@ -129,10 +128,7 @@ pub fn backward_transition_all(embassy: &mut Embassy, status_manager: &mut Statu
 
 /// Start the MuTaNT
 pub fn start_mutant(embassy: &mut Embassy) -> Result<(), EmbassyError> {
-    embassy.submit_message(EmbassyMessage::compose_ecc_op(
-        ECCOperation::Start.into(),
-        MUTANT_ID,
-    ))
+    embassy.submit_message(EmbassyMessage::compose(ECCOperation::Start, MUTANT_ID))
 }
 
 /// Reconfigure the MuTaNT (Regress once, and then Configure again) to
@@ -165,10 +161,7 @@ pub fn stop_mutant_blocking(
     embassy: &mut Embassy,
     status_manager: &mut StatusManager,
 ) -> Result<(), EmbassyError> {
-    embassy.submit_message(EmbassyMessage::compose_ecc_op(
-        ECCOperation::Stop.into(),
-        MUTANT_ID,
-    ))?;
+    embassy.submit_message(EmbassyMessage::compose(ECCOperation::Stop, MUTANT_ID))?;
 
     //Wait for mutant to stop
     loop {
@@ -187,10 +180,7 @@ pub fn start_cobos_blocking(
     status_manager: &mut StatusManager,
 ) -> Result<(), EmbassyError> {
     for id in 0..(NUMBER_OF_MODULES - 1) {
-        embassy.submit_message(EmbassyMessage::compose_ecc_op(
-            ECCOperation::Start.into(),
-            id,
-        ))?;
+        embassy.submit_message(EmbassyMessage::compose(ECCOperation::Start, id))?;
     }
 
     //Wait for good CoBo status
@@ -206,10 +196,47 @@ pub fn start_cobos_blocking(
 /// Stop all of the CoBos
 pub fn stop_cobos(embassy: &mut Embassy) -> Result<(), EmbassyError> {
     for id in 0..(NUMBER_OF_MODULES - 1) {
-        embassy.submit_message(EmbassyMessage::compose_ecc_op(
-            ECCOperation::Stop.into(),
-            id,
-        ))?;
+        embassy.submit_message(EmbassyMessage::compose(ECCOperation::Stop, id))?;
     }
+    Ok(())
+}
+
+pub fn backup_configs(
+    embassy: &mut Embassy,
+    experiment: &str,
+    run_number: &i32,
+) -> Result<(), EmbassyError> {
+    embassy.submit_message(EmbassyMessage::compose(
+        SentryOperation::Backup(SentryParameters {
+            experiment: String::from(experiment),
+            run_number: *run_number,
+        }),
+        0,
+    ))?;
+
+    Ok(())
+}
+
+pub fn catalog_run(
+    embassy: &mut Embassy,
+    status_manager: &mut StatusManager,
+    experiment: &str,
+    run_number: &i32,
+) -> Result<(), EmbassyError> {
+    embassy.submit_message(EmbassyMessage::compose(
+        SentryOperation::Catalog(SentryParameters {
+            experiment: String::from(experiment),
+            run_number: *run_number,
+        }),
+        0,
+    ))?;
+
+    loop {
+        poll_embassy(embassy, status_manager)?;
+        if status_manager.has_sentry_cataloged() {
+            break;
+        }
+    }
+
     Ok(())
 }

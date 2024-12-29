@@ -1,4 +1,7 @@
-use super::error::{ECCOperationError, ECCStatusError};
+use super::message::{MessageKind, ToMessage};
+use serde::{Deserialize, Serialize};
+
+use super::error::ConversionError;
 
 const ECC_OFFLINE_STATUS: &str = "Offline";
 const ECC_BUSY_STATUS: &str = "Busy";
@@ -82,7 +85,7 @@ impl From<ECCStatus> for i32 {
 }
 
 impl TryFrom<String> for ECCStatus {
-    type Error = ECCStatusError;
+    type Error = ConversionError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
             ECC_OFFLINE_STATUS => Ok(Self::Offline),
@@ -156,7 +159,7 @@ impl ECCStatus {
 
 /// An operation to be performed on
 /// a getECCServer. Can be converted to String.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ECCOperation {
     Describe,
     Prepare,
@@ -166,6 +169,12 @@ pub enum ECCOperation {
     Breakup,
     Stop,
     Invalid,
+}
+
+impl ToMessage for ECCOperation {
+    fn message_kind(&self) -> MessageKind {
+        MessageKind::ECCOperation
+    }
 }
 
 impl std::fmt::Display for ECCOperation {
@@ -184,7 +193,7 @@ impl std::fmt::Display for ECCOperation {
 }
 
 impl TryFrom<String> for ECCOperation {
-    type Error = ECCOperationError;
+    type Error = ConversionError;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
             ECC_DESCRIBE_OP => Ok(Self::Describe),

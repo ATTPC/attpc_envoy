@@ -1,10 +1,9 @@
-use crate::envoy::constants::{MUTANT_ID, NUMBER_OF_MODULES};
-use crate::envoy::ecc_envoy::{ECCOperationResponse, ECCStatusResponse};
-use crate::envoy::ecc_operation::ECCStatus;
-use crate::envoy::error::EmbassyError;
-use crate::envoy::message::{EmbassyMessage, MessageKind};
-use crate::envoy::surveyor_envoy::SurveyorResponse;
-use crate::envoy::surveyor_status::SurveyorStatus;
+use super::constants::{MUTANT_ID, NUMBER_OF_MODULES};
+use super::ecc_envoy::{ECCOperationResponse, ECCStatusResponse};
+use super::ecc_operation::ECCStatus;
+use super::error::EmbassyError;
+use super::message::{EmbassyMessage, MessageKind};
+use super::sentry_types::{SentryServerStatus, SentryStatus};
 
 /// Structure used to manage the status of all of the envoys. We need a centralized location
 /// because we also want to express the status of the entire system, not just the individuals.
@@ -13,7 +12,7 @@ use crate::envoy::surveyor_status::SurveyorStatus;
 #[derive(Debug)]
 pub struct StatusManager {
     ecc_status: Vec<ECCStatusResponse>,
-    surveyor_status: Vec<SurveyorResponse>,
+    sentry_status: Vec<SentryStatus>,
     ecc_holds: Vec<bool>,
 }
 
@@ -21,11 +20,11 @@ impl StatusManager {
     /// Create a new manager with space for the statuses of all envoys
     pub fn new() -> Self {
         let eccs = vec![ECCStatusResponse::default(); NUMBER_OF_MODULES];
-        let surs = vec![SurveyorResponse::default(); NUMBER_OF_MODULES - 1];
+        let sentries = vec![SentryStatus::default(); NUMBER_OF_MODULES - 1];
         let holds = vec![false; NUMBER_OF_MODULES];
         Self {
             ecc_status: eccs,
-            surveyor_status: surs,
+            sentry_status: sentries,
             ecc_holds: holds,
         }
     }
@@ -36,8 +35,8 @@ impl StatusManager {
             *eccs = ECCStatusResponse::default();
         }
 
-        for surs in self.surveyor_status.iter_mut() {
-            *surs = SurveyorResponse::default();
+        for surs in self.sentry_status.iter_mut() {
+            *surs = SentryStatus::default();
         }
     }
 
@@ -76,9 +75,9 @@ impl StatusManager {
                         self.ecc_status[module_id] = resp;
                     }
                 }
-                MessageKind::Surveyor => {
-                    let resp: SurveyorResponse = message.try_into()?;
-                    self.surveyor_status[module_id] = resp;
+                MessageKind::SentryStatus => {
+                    let resp: SentryStatus = message.try_into()?;
+                    self.sentry_status[module_id] = resp;
                 }
                 _ => {
                     tracing::warn!("Some how recieved a message of kind {} which is not a valid recieving kind!", message.kind);
@@ -155,9 +154,9 @@ impl StatusManager {
         matches!(self.get_ecc_status(MUTANT_ID), ECCStatus::Ready)
     }
 
-    /// Returns a slice of all SurveyorResponses (SurveyorEnvoy statuses)
-    pub fn get_surveyor_status_response(&self) -> &[SurveyorResponse] {
-        &self.surveyor_status
+    /// Returns a slice of all SentryStatuss (SurveyorEnvoy statuses)
+    pub fn get_sentry_status_response(&self) -> &[SentryStatus] {
+        &self.sentry_status
     }
 
     /// Get the status of a specific ECCEnvoy
@@ -190,21 +189,31 @@ impl StatusManager {
         }
     }
 
-    /// Retrieve the Surveyor/DataRouter system status. System status matches the envoy status if all
-    /// envoys have the same status. If not, the system status is Inconsistent.
-    pub fn get_surveyor_system_status(&self) -> SurveyorStatus {
-        let sys_status = self.surveyor_status[0].state;
-        for status in self.surveyor_status.iter() {
-            if sys_status != status.state {
-                return SurveyorStatus::Inconsistent;
+    pub fn has_sentry_cataloged(&self) -> bool {
+        for stat in self.sentry_status.iter() {
+            if stat.data_path_files != 0 {
+                return false;
             }
         }
-        SurveyorStatus::from(sys_status)
+        true
+    }
+
+    /// Retrieve the Surveyor/DataRouter system status. System status matches the envoy status if all
+    /// envoys have the same status. If not, the system status is Inconsistent.
+    pub fn get_sentry_server_system_status(&self) -> SentryServerStatus {
+        let sys_status = SentryServerStatus::from(&self.sentry_status[0]);
+        for status in self.sentry_status.iter() {
+            let this_status = SentryServerStatus::from(status);
+            if sys_status != this_status {
+                return SentryServerStatus::Inconsistent;
+            }
+        }
+        sys_status
     }
 
     /// Get the status of a specific SurveyorEnvoy
     #[allow(dead_code)]
-    pub fn get_surveyor_status(&self, id: usize) -> SurveyorStatus {
-        SurveyorStatus::from(self.surveyor_status[id].state)
+    pub fn get_sentry_server_status(&self, id: usize) -> SentryServerStatus {
+        SentryServerStatus::from(&self.sentry_status[id])
     }
 }
