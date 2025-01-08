@@ -109,6 +109,17 @@ async fn submit_check_status(
 ) -> Result<EmbassyMessage, EnvoyError> {
     let response = client.get(config.status()).send().await?;
 
+    match response.status() {
+        StatusCode::INTERNAL_SERVER_ERROR => {
+            tracing::error!(
+                "SentryEnvoy received a server error when checking status: {}",
+                response.text().await?
+            );
+            return Ok(EmbassyMessage::compose(SentryStatus::default(), config.id));
+        }
+        _ => (),
+    }
+
     let resp_string = response.text().await?;
     let parsed: SentryResponse = serde_json::from_str(&resp_string)?;
     let current_path_gb = parsed.data_written_gb;
@@ -134,7 +145,7 @@ pub fn startup_sentry_envoys(
         let handle = runtime.spawn(async move {
             match run_sentry_envoy(config, this_op, this_tx, this_cancel).await {
                 Ok(()) => (),
-                Err(e) => tracing::error!("Error in ECC envoy: {}", e),
+                Err(e) => tracing::error!("Error in Sentry envoy: {}", e),
             }
         });
 
