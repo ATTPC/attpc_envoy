@@ -90,11 +90,8 @@ async fn submit_operation(
             client.post(config.catalog()).json(&params).send().await?
         }
     };
-    match response.status() {
-        StatusCode::INTERNAL_SERVER_ERROR => {
-            return Err(EnvoyError::ServerError(response.text().await?))
-        }
-        _ => (),
+    if response.status() == StatusCode::INTERNAL_SERVER_ERROR {
+        return Err(EnvoyError::ServerError(response.text().await?));
     }
     let resp_string = response.text().await?;
     let parsed: SentryResponse = serde_json::from_str(&resp_string)?;
@@ -109,15 +106,12 @@ async fn submit_check_status(
 ) -> Result<EmbassyMessage, EnvoyError> {
     let response = client.get(config.status()).send().await?;
 
-    match response.status() {
-        StatusCode::INTERNAL_SERVER_ERROR => {
-            tracing::error!(
-                "SentryEnvoy received a server error when checking status: {}",
-                response.text().await?
-            );
-            return Ok(EmbassyMessage::compose(SentryStatus::default(), config.id));
-        }
-        _ => (),
+    if response.status() == StatusCode::INTERNAL_SERVER_ERROR {
+        tracing::error!(
+            "SentryEnvoy received a server error when checking status: {}",
+            response.text().await?
+        );
+        return Ok(EmbassyMessage::compose(SentryStatus::default(), config.id));
     }
 
     let resp_string = response.text().await?;

@@ -1,6 +1,7 @@
 use crate::envoy::ecc_operation::ECCStatus;
 use crate::envoy::sentry_types::SentryServerStatus;
 use eframe::egui::Color32;
+use std::cmp::Ordering;
 
 impl From<&ECCStatus> for Color32 {
     fn from(value: &ECCStatus) -> Color32 {
@@ -28,12 +29,10 @@ impl From<&SentryServerStatus> for Color32 {
 }
 
 pub fn n_files_color(n_files: &i32) -> Color32 {
-    if *n_files == 0 {
-        Color32::LIGHT_GRAY
-    } else if *n_files < 0 {
-        Color32::RED
-    } else {
-        Color32::GOLD
+    match n_files.cmp(&0) {
+        Ordering::Equal => Color32::LIGHT_GRAY,
+        Ordering::Less => Color32::RED,
+        Ordering::Greater => Color32::GOLD,
     }
 }
 

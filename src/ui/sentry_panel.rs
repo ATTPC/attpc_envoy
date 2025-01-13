@@ -79,7 +79,7 @@ pub fn render_sentry_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
                             ui.label(RichText::new(status.data_path.clone()));
                         });
                         row.col(|ui| {
-                            ui.label(RichText::new(format!("{}", status.process.clone())));
+                            ui.label(RichText::new(status.process.clone().to_string()));
                         });
                         row.col(|ui| {
                             ui.label(
