@@ -97,7 +97,7 @@ pub fn render_sentry_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
                         });
                         row.col(|ui| {
                             ui.label(RichText::new(format!(
-                                "{:3}%",
+                                "{:.3}%",
                                 1.0 - status.disk_avail_gb / status.disk_total_gb,
                             )));
                         });
