@@ -46,7 +46,7 @@ impl StatusManager {
         for message in messages {
             let module_id = message.id;
             match message.kind {
-                MessageKind::ECCOperation => {
+                MessageKind::ECCOpResponse => {
                     let resp: ECCOperationResponse = message.try_into()?;
                     if resp.error_code != 0 {
                         tracing::error!(

@@ -97,7 +97,7 @@ impl TryInto<ECCOperationResponse> for EmbassyMessage {
     type Error = EmbassyError;
     fn try_into(self) -> Result<ECCOperationResponse, Self::Error> {
         match self.kind {
-            MessageKind::ECCOperation => {
+            MessageKind::ECCOpResponse => {
                 Ok(serde_json::from_str::<ECCOperationResponse>(&self.body)?)
             }
             _ => Err(Self::Error::InvalidKind(
@@ -112,7 +112,7 @@ impl TryInto<ECCOperationResponse> for &EmbassyMessage {
     type Error = EmbassyError;
     fn try_into(self) -> Result<ECCOperationResponse, Self::Error> {
         match self.kind {
-            MessageKind::ECCOperation => {
+            MessageKind::ECCOpResponse => {
                 Ok(serde_json::from_str::<ECCOperationResponse>(&self.body)?)
             }
             _ => Err(Self::Error::InvalidKind(
