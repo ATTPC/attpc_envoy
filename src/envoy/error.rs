@@ -167,3 +167,28 @@ impl std::fmt::Display for EmbassyError {
 }
 
 impl std::error::Error for EmbassyError {}
+
+#[derive(Debug)]
+pub enum BackupError {
+    FailedIO(std::io::Error),
+    AlreadyExists(std::path::PathBuf, i32),
+}
+
+impl From<std::io::Error> for BackupError {
+    fn from(value: std::io::Error) -> Self {
+        Self::FailedIO(value)
+    }
+}
+
+impl std::fmt::Display for BackupError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::FailedIO(e) => write!(f, "Backup of config files failed due to: {e}"),
+            Self::AlreadyExists(p, r) => {
+                write!(f, "Config backup dir {p:?} already exists for run {r}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for BackupError {}
