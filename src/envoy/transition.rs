@@ -1,10 +1,12 @@
-use super::constants::{MUTANT_ID, NUMBER_OF_MODULES};
+use super::constants::{BACK_CONFIG_DIR, CONFIG_DIR, MUTANT_ID, NUMBER_OF_MODULES};
 use super::ecc_operation::ECCOperation;
 use super::embassy::Embassy;
 use super::error::EmbassyError;
 use super::message::EmbassyMessage;
 use super::sentry_types::{SentryOperation, SentryParameters};
 use super::status_manager::StatusManager;
+use std::fs::read_dir;
+use std::path::PathBuf;
 
 pub fn poll_embassy(
     embassy: &mut Embassy,
@@ -201,19 +203,54 @@ pub fn stop_cobos(embassy: &mut Embassy) -> Result<(), EmbassyError> {
     Ok(())
 }
 
-pub fn backup_configs(
-    embassy: &mut Embassy,
-    experiment: &str,
-    run_number: &i32,
-) -> Result<(), EmbassyError> {
-    embassy.submit_message(EmbassyMessage::compose(
-        SentryOperation::Backup(SentryParameters {
-            experiment: String::from(experiment),
-            run_number: *run_number,
-        }),
-        0,
-    ))?;
+pub fn backup_configs(experiment: &str, run_number: &i32) -> Result<(), EmbassyError> {
+    let config_path = PathBuf::from(CONFIG_DIR);
+    let cobo_path = config_path.join("describe-cobo");
+    let bck_config_path =
+        PathBuf::from(BACK_CONFIG_DIR).join(format!("{}/run_{:04}", experiment, run_number));
+    let bck_cobo_path = bck_config_path.join("describe-cobo");
 
+    if !bck_config_path.exists() {
+        std::fs::create_dir_all(&bck_cobo_path).expect("Failed creating cobo backup directories");
+    }
+
+    let prep_name = format!("prepare-{}.xcfg", experiment);
+    let desc_name = format!("describe-{}.xcfg", experiment);
+    let conf_name = format!("configure-{}.xcfg", experiment);
+
+    std::fs::copy(
+        config_path.join(&prep_name),
+        bck_config_path.join(&prep_name),
+    )
+    .expect("Could not back up prepare file");
+    std::fs::copy(
+        config_path.join(&desc_name),
+        bck_config_path.join(&desc_name),
+    )
+    .expect("Could not back up desc file");
+    std::fs::copy(
+        config_path.join(&conf_name),
+        bck_config_path.join(&conf_name),
+    )
+    .expect("Could not back up conf file");
+
+    let reader = read_dir(cobo_path).expect("Could not read cobo dir");
+    for maybe_entry in reader {
+        match maybe_entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if path.is_file() {
+                    std::fs::copy(
+                        &path,
+                        bck_cobo_path
+                            .join(path.file_name().expect("Cobo file doesn't have a name?")),
+                    )
+                    .expect("Could not backup cobo dir file");
+                }
+            }
+            Err(e) => tracing::error!("Could not get an entry in the cobo dir! {e}"),
+        }
+    }
     Ok(())
 }
 

@@ -68,15 +68,15 @@ impl SentryStatus {
             data_path_files: resp.data_path_files,
             disk_avail_gb: resp.disk_avail_gb,
             disk_total_gb: resp.disk_total_gb,
-            data_rate_mb: (resp.data_written_gb / ellapsed_time_sec) * 1.0e3,
+            data_rate_mb: ((resp.data_written_gb - prev_written_gb) / ellapsed_time_sec) * 1.0e3,
         }
     }
 }
 
+// This technically isn't needed but maybe someday we'll do more...
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SentryOperation {
     Catalog(SentryParameters),
-    Backup(SentryParameters),
 }
 
 impl ToMessage for SentryOperation {

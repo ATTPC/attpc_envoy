@@ -149,11 +149,7 @@ impl EnvoyApp {
         tracing::info!(".graw files moved.");
         tracing::info!("Backing up GET configuration...");
 
-        match backup_configs(
-            &mut self.embassy,
-            &self.config.experiment,
-            &self.config.run_number,
-        ) {
+        match backup_configs(&self.config.experiment, &self.config.run_number) {
             Ok(_) => (),
             Err(e) => {
                 tracing::error!("Could not backup config files after the stop run signal: {e}")

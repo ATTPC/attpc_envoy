@@ -31,10 +31,6 @@ impl SentryConfig {
     pub fn catalog(&self) -> String {
         format!("{}/catalog", self.base_address)
     }
-
-    pub fn backup(&self) -> String {
-        format!("{}/backup", self.base_address)
-    }
 }
 
 pub async fn run_sentry_envoy(
@@ -82,11 +78,8 @@ async fn submit_operation(
     prev_written_gb: &mut f64,
 ) -> Result<EmbassyMessage, EnvoyError> {
     let response = match operation {
-        SentryOperation::Backup(params) => {
-            *prev_written_gb = 0.0;
-            client.post(config.backup()).json(&params).send().await?
-        }
         SentryOperation::Catalog(params) => {
+            *prev_written_gb = 0.0;
             client.post(config.catalog()).json(&params).send().await?
         }
     };
