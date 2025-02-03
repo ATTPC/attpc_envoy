@@ -64,7 +64,7 @@ impl SentryStatus {
             disk: resp.disk,
             process: resp.process,
             data_path: resp.data_path,
-            data_written_gb: prev_written_gb + resp.data_written_gb,
+            data_written_gb: resp.data_written_gb,
             data_path_files: resp.data_path_files,
             disk_avail_gb: resp.disk_avail_gb,
             disk_total_gb: resp.disk_total_gb,

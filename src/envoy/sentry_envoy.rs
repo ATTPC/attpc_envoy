@@ -111,7 +111,7 @@ async fn submit_check_status(
     let parsed: SentryResponse = serde_json::from_str(&resp_string)?;
     let current_path_gb = parsed.data_written_gb;
     let status = SentryStatus::from_response(parsed, prev_written_gb, STATUS_WAIT_TIME_SEC as f64);
-    *prev_written_gb += current_path_gb;
+    *prev_written_gb = current_path_gb;
     Ok(EmbassyMessage::compose(status, config.id))
 }
 
