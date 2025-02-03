@@ -124,7 +124,7 @@ pub fn startup_sentry_envoys(
     let mut handles: Vec<JoinHandle<()>> = vec![];
 
     //spin up the envoys
-    for id in 0..NUMBER_OF_MODULES {
+    for id in 0..(NUMBER_OF_MODULES - 1) {
         let config = SentryConfig::new(id);
         let this_tx = tx.clone();
         let this_cancel = cancel.subscribe();
