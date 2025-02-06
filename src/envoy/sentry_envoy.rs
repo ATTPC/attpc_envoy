@@ -57,15 +57,19 @@ pub async fn run_sentry_envoy(
             maybe = incoming.recv() => {
                 if let Ok(msg) = maybe {
                     let operation: SentryOperation = serde_json::from_str(&msg.body)?;
-                    let response = submit_operation(&client, &config, operation, &mut prev_written_gb).await?;
-                    outgoing.send(response).await?;
+                    match submit_operation(&client, &config, operation, &mut prev_written_gb).await {
+                        Ok(response) => outgoing.send(response).await?,
+                        Err(e) => tracing::warn!("Sentry envoy failed to submit an operation: {e}"),
+                    }
                 } else {
                     return Ok(());
                 }
             }
             _ = tokio::time::sleep(Duration::from_secs(STATUS_WAIT_TIME_SEC)) => {
-                let response = submit_check_status(&client, &config, &mut prev_written_gb).await?;
-                outgoing.send(response).await?;
+                match submit_check_status(&client, &config, &mut prev_written_gb).await {
+                    Ok(response) => outgoing.send(response).await?,
+                    Err(e) => tracing::warn!("Sentry failed to check the status: {e}"),
+                }
             }
         }
     }

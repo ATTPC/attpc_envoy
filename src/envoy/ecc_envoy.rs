@@ -198,8 +198,10 @@ async fn run_ecc_envoy(
 
             data = incoming.recv() => {
                 if let Some(message) = data {
-                    let response = submit_operation(&config, &client, message).await?;
-                    outgoing.send(response).await?;
+                    match submit_operation(&config, &client, message).await {
+                        Ok(response) => outgoing.send(response).await?,
+                        Err(e) => tracing::warn!("ECC failed to submit operation: {e}"),
+                    }
                 } else {
                     return Ok(())
                 }
