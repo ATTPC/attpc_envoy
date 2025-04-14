@@ -1,7 +1,7 @@
 use super::ecc_envoy::startup_ecc_envoys;
 use super::error::EmbassyError;
 use super::message::{EmbassyMessage, MessageKind};
-use super::surveyor_envoy::startup_surveyor_envoys;
+use super::sentry_envoy::startup_sentry_envoys;
 use std::collections::HashMap;
 use tokio::runtime::Runtime;
 use tokio::sync::broadcast;
@@ -15,6 +15,7 @@ use tokio::task::JoinHandle;
 #[derive(Debug)]
 pub struct Embassy {
     ecc_senders: HashMap<usize, mpsc::Sender<EmbassyMessage>>,
+    sentry_sender: Option<broadcast::Sender<EmbassyMessage>>,
     envoy_reciever: Option<mpsc::Receiver<EmbassyMessage>>,
     cancel: Option<broadcast::Sender<EmbassyMessage>>,
     handles: Option<Vec<JoinHandle<()>>>,
@@ -27,6 +28,7 @@ impl Embassy {
     pub fn new(rt: Runtime) -> Self {
         Embassy {
             ecc_senders: HashMap::new(),
+            sentry_sender: None,
             envoy_reciever: None,
             cancel: None,
             handles: None,
@@ -39,12 +41,15 @@ impl Embassy {
     pub fn startup(&mut self, experiment: &str) {
         let (envoy_tx, embassy_rx) = mpsc::channel::<EmbassyMessage>(33);
         let (cancel_tx, _) = broadcast::channel::<EmbassyMessage>(10);
+        let (sentry_tx, _) = broadcast::channel::<EmbassyMessage>(10);
 
         let (mut handles, ecc_switchboard) =
             startup_ecc_envoys(&mut self.runtime, experiment, &envoy_tx, &cancel_tx);
-        let mut sur_handles = startup_surveyor_envoys(&mut self.runtime, &envoy_tx, &cancel_tx);
-        handles.append(&mut sur_handles);
+        let mut sentry_handles =
+            startup_sentry_envoys(&mut self.runtime, &envoy_tx, &sentry_tx, &cancel_tx);
+        handles.append(&mut sentry_handles);
         self.ecc_senders = ecc_switchboard;
+        self.sentry_sender = Some(sentry_tx);
         self.envoy_reciever = Some(embassy_rx);
         self.cancel = Some(cancel_tx);
         self.is_connected = true;
@@ -69,11 +74,20 @@ impl Embassy {
 
     /// Submit an EmbassyMessage. Currently only communicates with ECCEnvoys.
     pub fn submit_message(&mut self, message: EmbassyMessage) -> Result<(), EmbassyError> {
-        if message.kind == MessageKind::ECCOperation {
-            if let Some(sender) = self.ecc_senders.get_mut(&message.id) {
-                sender.blocking_send(message)?;
+        match message.kind {
+            MessageKind::ECCOperation => {
+                if let Some(sender) = self.ecc_senders.get_mut(&message.id) {
+                    sender.blocking_send(message)?;
+                }
             }
+            MessageKind::SentryOperation => {
+                if let Some(sender) = &self.sentry_sender {
+                    sender.send(message)?;
+                }
+            }
+            _ => (),
         }
+
         Ok(())
     }
 

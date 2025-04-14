@@ -60,7 +60,7 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
             ui.add(
                 eframe::egui::widgets::TextEdit::singleline(&mut app.config.experiment)
                     .desired_width(100.0)
-                    .margin(eframe::egui::Margin::symmetric(4.0, 4.0)),
+                    .margin(eframe::egui::Margin::symmetric(4, 4)),
             );
             ui.label(RichText::new("Run Number").size(16.0));
             ui.add(DragValue::new(&mut app.config.run_number).speed(1));
@@ -68,7 +68,7 @@ pub fn render_config_panel(app: &mut EnvoyApp, ctx: &eframe::egui::Context) {
             ui.add(
                 eframe::egui::widgets::TextEdit::singleline(&mut app.config.description)
                     .desired_width(f32::INFINITY)
-                    .margin(eframe::egui::Margin::symmetric(4.0, 4.0)),
+                    .margin(eframe::egui::Margin::symmetric(4, 4)),
             );
         });
         // Connect buttons
