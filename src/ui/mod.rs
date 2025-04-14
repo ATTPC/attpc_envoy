@@ -7,6 +7,6 @@ mod ecc_panel;
 mod error;
 mod graph_manager;
 mod graph_panel;
-mod router_panel;
 mod run_log_panel;
+mod sentry_panel;
 mod style;

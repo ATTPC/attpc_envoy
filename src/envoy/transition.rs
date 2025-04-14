@@ -1,9 +1,12 @@
-use super::constants::{MUTANT_ID, NUMBER_OF_MODULES};
+use super::constants::{BACK_CONFIG_DIR, CONFIG_DIR, MUTANT_ID, NUMBER_OF_MODULES};
 use super::ecc_operation::ECCOperation;
 use super::embassy::Embassy;
-use super::error::EmbassyError;
+use super::error::{BackupError, EmbassyError};
 use super::message::EmbassyMessage;
+use super::sentry_types::{SentryOperation, SentryParameters};
 use super::status_manager::StatusManager;
+use std::fs::read_dir;
+use std::path::PathBuf;
 
 pub fn poll_embassy(
     embassy: &mut Embassy,
@@ -46,12 +49,10 @@ pub fn transition_ecc(
         };
         match operation {
             ECCOperation::Invalid => (),
-            _ => {
-                match embassy.submit_message(EmbassyMessage::compose_ecc_op(operation.into(), id)) {
-                    Ok(()) => (),
-                    Err(e) => tracing::error!("Embassy had an error sending a message: {}", e),
-                }
-            }
+            _ => match embassy.submit_message(EmbassyMessage::compose(operation, id)) {
+                Ok(()) => (),
+                Err(e) => tracing::error!("Embassy had an error sending a message: {}", e),
+            },
         }
         status_manager.set_ecc_busy(id);
     }
@@ -129,10 +130,7 @@ pub fn backward_transition_all(embassy: &mut Embassy, status_manager: &mut Statu
 
 /// Start the MuTaNT
 pub fn start_mutant(embassy: &mut Embassy) -> Result<(), EmbassyError> {
-    embassy.submit_message(EmbassyMessage::compose_ecc_op(
-        ECCOperation::Start.into(),
-        MUTANT_ID,
-    ))
+    embassy.submit_message(EmbassyMessage::compose(ECCOperation::Start, MUTANT_ID))
 }
 
 /// Reconfigure the MuTaNT (Regress once, and then Configure again) to
@@ -165,10 +163,7 @@ pub fn stop_mutant_blocking(
     embassy: &mut Embassy,
     status_manager: &mut StatusManager,
 ) -> Result<(), EmbassyError> {
-    embassy.submit_message(EmbassyMessage::compose_ecc_op(
-        ECCOperation::Stop.into(),
-        MUTANT_ID,
-    ))?;
+    embassy.submit_message(EmbassyMessage::compose(ECCOperation::Stop, MUTANT_ID))?;
 
     //Wait for mutant to stop
     loop {
@@ -187,10 +182,7 @@ pub fn start_cobos_blocking(
     status_manager: &mut StatusManager,
 ) -> Result<(), EmbassyError> {
     for id in 0..(NUMBER_OF_MODULES - 1) {
-        embassy.submit_message(EmbassyMessage::compose_ecc_op(
-            ECCOperation::Start.into(),
-            id,
-        ))?;
+        embassy.submit_message(EmbassyMessage::compose(ECCOperation::Start, id))?;
     }
 
     //Wait for good CoBo status
@@ -206,10 +198,79 @@ pub fn start_cobos_blocking(
 /// Stop all of the CoBos
 pub fn stop_cobos(embassy: &mut Embassy) -> Result<(), EmbassyError> {
     for id in 0..(NUMBER_OF_MODULES - 1) {
-        embassy.submit_message(EmbassyMessage::compose_ecc_op(
-            ECCOperation::Stop.into(),
-            id,
-        ))?;
+        embassy.submit_message(EmbassyMessage::compose(ECCOperation::Stop, id))?;
     }
+    Ok(())
+}
+
+pub fn backup_configs(experiment: &str, run_number: &i32) -> Result<(), BackupError> {
+    let config_path = PathBuf::from(CONFIG_DIR);
+    let cobo_path = config_path.join("describe-cobo");
+    let bck_config_path =
+        PathBuf::from(BACK_CONFIG_DIR).join(format!("{}/run_{:04}", experiment, run_number));
+    let bck_cobo_path = bck_config_path.join("describe-cobo");
+
+    if bck_config_path.exists() {
+        return Err(BackupError::AlreadyExists(bck_config_path, *run_number));
+    }
+    std::fs::create_dir_all(&bck_cobo_path)?;
+
+    let prep_name = format!("prepare-{}.xcfg", experiment);
+    let desc_name = format!("describe-{}.xcfg", experiment);
+    let conf_name = format!("configure-{}.xcfg", experiment);
+
+    std::fs::copy(
+        config_path.join(&prep_name),
+        bck_config_path.join(&prep_name),
+    )?;
+    std::fs::copy(
+        config_path.join(&desc_name),
+        bck_config_path.join(&desc_name),
+    )?;
+    std::fs::copy(
+        config_path.join(&conf_name),
+        bck_config_path.join(&conf_name),
+    )?;
+
+    let reader = read_dir(cobo_path)?;
+    for maybe_entry in reader {
+        match maybe_entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if path.is_file() {
+                    std::fs::copy(
+                        &path,
+                        bck_cobo_path
+                            .join(path.file_name().expect("Cobo file doesn't have a name?")),
+                    )?;
+                }
+            }
+            Err(e) => tracing::error!("Could not get an entry in the cobo dir! {e}"),
+        }
+    }
+    Ok(())
+}
+
+pub fn catalog_run(
+    embassy: &mut Embassy,
+    status_manager: &mut StatusManager,
+    experiment: &str,
+    run_number: &i32,
+) -> Result<(), EmbassyError> {
+    embassy.submit_message(EmbassyMessage::compose(
+        SentryOperation::Catalog(SentryParameters {
+            experiment: String::from(experiment),
+            run_number: *run_number,
+        }),
+        0,
+    ))?;
+
+    loop {
+        poll_embassy(embassy, status_manager)?;
+        if status_manager.has_sentry_cataloged() {
+            break;
+        }
+    }
+
     Ok(())
 }

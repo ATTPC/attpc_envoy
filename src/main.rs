@@ -54,7 +54,6 @@
 //! in a way that aims to be expressive about where information is coming from. Tracing logs data to the terminal, so if things seem to not be working, check the terminal from which you spawned
 //! attpc_envoy and see if anything was reported.
 
-mod command;
 mod envoy;
 mod ui;
 

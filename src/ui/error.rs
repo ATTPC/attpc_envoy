@@ -1,28 +1,9 @@
-#[derive(Debug)]
+use thiserror::Error;
+
+#[derive(Debug, Error)]
 pub enum ConfigError {
-    FailedToParse(serde_yaml::Error),
-    BadIO(std::io::Error),
+    #[error("Failed parsing configuration yaml: {0}")]
+    FailedToParse(#[from] serde_yaml::Error),
+    #[error("Config failed to write to disk: {0}")]
+    BadIO(#[from] std::io::Error),
 }
-
-impl From<serde_yaml::Error> for ConfigError {
-    fn from(value: serde_yaml::Error) -> Self {
-        ConfigError::FailedToParse(value)
-    }
-}
-
-impl From<std::io::Error> for ConfigError {
-    fn from(value: std::io::Error) -> Self {
-        ConfigError::BadIO(value)
-    }
-}
-
-impl std::fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::BadIO(e) => write!(f, "Config failed IO: {e}"),
-            Self::FailedToParse(e) => write!(f, "Config failed to parse: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for ConfigError {}
