@@ -39,13 +39,13 @@ impl RateGraph {
     /// Convert the data to a egui_plot::Line.
     pub fn get_points_to_draw(&self, times: &VecDeque<f64>) -> Line {
         Line::new(
+            &self.name,
             times
                 .iter()
                 .zip(self.points.iter())
                 .map(|(time, rate)| [*time, *rate])
                 .collect::<Vec<[f64; 2]>>(),
         )
-        .name(&self.name)
     }
 
     /// Reset the graph, deleting all points
